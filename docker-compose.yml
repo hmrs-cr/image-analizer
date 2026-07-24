@@ -1,0 +1,42 @@
+services:
+  image-analyzer:
+    image: image-analyzer-service:latest
+    container_name: image_analyzer
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      # IMAP Configurations (Optional - leave empty or omit to disable IMAP push check)
+      - EMAIL_ACCOUNT=${EMAIL_ACCOUNT:-}
+      - EMAIL_PASSWORD=${EMAIL_PASSWORD:-}
+      - IMAP_SERVER=${IMAP_SERVER:-imap.gmail.com}
+      - TARGET_FROM=${TARGET_FROM:-hmxcam@gmail.com}
+      - TARGET_SUBJECT=${TARGET_SUBJECT:-Alerta de su DVR --- Se ha detectado un movimiento}
+      - IMAP_FOLDER=${IMAP_FOLDER:-INBOX}
+      - DOWNLOAD_FOLDER=${DOWNLOAD_FOLDER:-/app/cam_attachments}
+
+      # AI configurations
+      - YOLO_MODEL=${YOLO_MODEL:-yolov8n.pt}
+      - FACIAL_DB_PATH=${FACIAL_DB_PATH:-}
+      - MIN_CONFIDENCE=${MIN_CONFIDENCE:-0.5}
+      - TARGET_CLASSES=${TARGET_CLASSES:-person,bicycle,car,motorcycle,bus,truck,bird,cat,dog,horse,sheep,cow}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_SYSTEM_PROMPT_FILE=${GEMINI_SYSTEM_PROMPT_FILE:-./security-cam.md}
+
+      # Telegram notifications configuration
+      - TELEGRAM_TOKEN=${TELEGRAM_TOKEN:-}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+      - TELEGRAM_DELETE_AFTER_SEND=${TELEGRAM_DELETE_AFTER_SEND:-true}
+      - TELEGRAM_RETRIES=${TELEGRAM_RETRIES:-3}
+
+      # HTTP API host and port
+      - HTTP_HOST=${HTTP_HOST:-0.0.0.0}
+      - HTTP_PORT=${HTTP_PORT:-5000}
+
+      # Access control (strongly recommended to set these)
+      - AUTH_USERNAME=${AUTH_USERNAME:-}
+      - AUTH_PASSWORD=${AUTH_PASSWORD:-}
+      - ANALYZE_SHARED_SECRET=${ANALYZE_SHARED_SECRET:-}
+    volumes:
+      - ./cam_attachments:/app/cam_attachments
+      - ./facial_db:/app/facial_db

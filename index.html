@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Analyzer Admin Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header" id="app-header">
+            <div class="header-logo">
+                <span class="logo-icon"></span>
+                <h1>Image Analyzer Admin</h1>
+            </div>
+            <div class="header-status">
+                <button class="btn btn-outline btn-sm" id="btn-open-settings" style="margin-right: 8px;">View Settings</button>
+                <div class="status-badge" id="server-status">
+                    <span class="status-indicator active"></span>
+                    <span id="status-text">Online</span>
+                </div>
+                <div class="uptime-badge">Uptime: <span id="uptime-value">0h 0m</span></div>
+            </div>
+        </header>
+
+        <main class="dashboard-grid">
+            <!-- Left Column: Statistics & Snooze -->
+            <section class="dashboard-column" id="dashboard-col-left">
+                <!-- Statistics Card -->
+                <div class="card stats-card">
+                    <h2 id="stats-title" style="border-bottom: 1px solid var(--card-border);">System Statistics</h2>
+
+                    <!-- Individual Cameras Stats -->
+                    <div class="cameras-stats-container" id="cameras-stats-container" style="margin-top: 0px; border-top: 0px; padding-top: 6px;">
+                        <div class="cameras-stats-header">
+                            <h3 style="font-size: 0.95rem; font-weight: 600; color: var(--text-muted); margin:0;">By Camera</h3>
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <button id="btn-toggle-all-groups" class="btn btn-outline btn-sm" type="button">Collapse All</button>
+                                <input id="camera-search-input" class="camera-search-input" type="text" placeholder="Search camera" aria-label="Search cameras" />
+                            </div>
+                        </div>
+                        <div class="cameras-stats-table-wrap">
+                            <table class="cameras-stats-table" style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+                                <thead>
+                                    <tr style="text-align: left; border-bottom: 1px solid var(--card-border); color: var(--text-muted);">
+                                        <th style="padding: 6px 0;">Camera</th>
+                                        <th style="padding: 6px 0; text-align: center;">Analyzed</th>
+                                        <th style="padding: 6px 0; text-align: center;">Matches</th>
+                                        <th style="padding: 6px 0; text-align: center;">Alerts</th>
+                                        <th style="padding: 6px 0; text-align: right;">Snooze</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="cameras-stats-body">
+                                    <tr>
+                                        <td colspan="5" style="text-align: center; padding: 12px 0; color: var(--text-muted); font-style: italic;">No cameras active yet.</td>
+                                    </tr>
+                                </tbody>
+                                <tfoot>
+                                    <tr class="camera-summary-footer">
+                                        <td style="padding: 8px 0; font-weight: 600; color: var(--text-main);">Totals</td>
+                                        <td id="camera-summary-analyzed" style="padding: 8px 0; text-align: center; color: var(--text-main);">0</td>
+                                        <td id="camera-summary-matches" style="padding: 8px 0; text-align: center; color: var(--accent);">0</td>
+                                        <td id="camera-summary-alerts" style="padding: 8px 0; text-align: center; color: var(--primary);">0</td>
+                                        <td style="padding: 8px 0; text-align: right; color: var(--text-muted);">—</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <!-- Horizontal Splitter -->
+                    <div class="splitter-v" id="splitter-v" title="Drag to resize panels">
+                        <div class="splitter-handle"></div>
+                    </div>
+
+                    <div class="image-history-container" id="image-history-container" style="margin-top: 0px; border-top: 0px; padding-top: 8px;">
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom: 12px;">
+                            <h3 style="font-size: 0.95rem; font-weight: 600; color: var(--text-muted); margin:0;">Recent Images</h3>
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <button id="btn-toggle-no-detections" class="btn btn-outline btn-sm" type="button">Show No Detections</button>
+                                <span id="history-filter-label" style="font-size: 0.82rem; color: var(--text-muted);">Showing all cameras</span>
+                                <button id="btn-clear-history-filter" class="btn btn-outline btn-sm" type="button" style="white-space: nowrap;">Clear Filter</button>
+                            </div>
+                        </div>
+                        <div id="image-history-list" class="image-history-list"></div>
+                        <div id="image-history-empty" class="placeholder-text" style="display: none; margin-top: 2px;">No images recorded yet.</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Vertical Splitter -->
+            <div class="splitter-h" id="splitter-h" title="Drag to resize columns">
+                <div class="splitter-handle-h"></div>
+            </div>
+
+            <!-- Right Column: Last Detection -->
+            <section class="dashboard-column" id="dashboard-col-right">
+                <!-- Last Detection Card -->
+                <div class="card detection-card">
+                    <div class="card-header-actions" style="display:none;">
+                        <h2 id="detection-title">Last Detection</h2>
+                        <div style="display:flex; gap:10px; align-items:center;">
+                            <button class="btn btn-secondary btn-sm" id="btn-unpin-history" type="button" style="display:none;">Show Live</button>
+                        </div>
+                        <!--<button class="btn btn-primary btn-sm" id="btn-trigger-analysis">Manual Analyze</button>-->
+                    </div>
+                    <div id="no-detection-placeholder" class="placeholder-text">
+                        No image analyzed yet.
+                    </div>
+                    <div id="detection-content" class="detection-content" style="display: none;">
+                        <div class="image-preview-container">
+                            <img id="last-detection-image" src="" alt="Last detected motion">
+                            <div class="image-overlay-meta">
+                                <div class="image-title-pill" id="detection-title-inline">Last Detection</div>
+                            </div>
+                        </div>
+                        <div class="detection-details">
+                            <div class="detail-row">
+                                <span class="detail-label">Location/Channel:</span>
+                                <span class="detail-value" id="last-detection-location">-</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Timestamp:</span>
+                                <span class="detail-value image-timestamp" id="last-detection-time">-</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">AI Detections:</span>
+                                <span class="detail-value" id="last-detection-objects">-</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Facial Match:</span>
+                                <span class="detail-value highlight-name" id="last-detection-faces">No match found</span>
+                            </div>
+                            <div class="detail-row description-row">
+                                <span class="detail-label">Gemini Analysis:</span>
+                                <p class="detail-value description-text" id="last-detection-desc">-</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Read-only Settings Dialog Modal -->
+    <dialog id="settings-dialog" class="settings-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Current Settings (Read-Only)</h2>
+                <button id="close-settings-dialog" class="btn-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="settings-view" class="settings-view-grid">
+                    <!-- Dynamic Read-only settings will populate here -->
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Toast Notifications container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="./app.js"></script>
+</body>
+</html>

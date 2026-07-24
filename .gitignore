@@ -1,0 +1,25 @@
+# OS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# YOLO model weights (downloaded at build/run time, see Dockerfile)
+*.pt
+
+# Runtime data
+cam_attachments/
+*.log
+
+# Deploy-time secret file, not part of this repo (see CLAUDE.md)
+security-cam.md
+
+# Env / secrets
+.env
+.env.*
+
+# Claude Code local settings
+.claude/settings.local.json
