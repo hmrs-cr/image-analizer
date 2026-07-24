@@ -11,6 +11,8 @@ serves a small dashboard (static HTML/CSS/JS) plus a JSON API over the same HTTP
 
 - **IMAP email source** — IDLEs on a Gmail (or other IMAP) inbox, matches DVR motion-alert
   emails, extracts device/channel names from the body, and downloads JPG attachments.
+- **FTP image source** — runs a plain-FTP server that DVR cameras can upload snapshots to
+  directly, one user per camera (see `--ftp-users` below).
 - **Local object detection** — runs YOLOv8 on every downloaded image and filters detections to a
   configurable set of COCO classes and minimum confidence.
 - **Optional face recognition** — runs DeepFace against a folder of known identities when a
@@ -70,6 +72,9 @@ filters.
 | `--subject` | `TARGET_SUBJECT` | Optional: only process emails containing this subject |
 | `--imap-folder` | `IMAP_FOLDER` | IMAP folder to monitor (default `INBOX`) |
 | `--download-folder` | `DOWNLOAD_FOLDER` | Directory to save downloaded images |
+| `--ftp-host` | `FTP_HOST` | Host for the FTP image upload server (default `0.0.0.0`) |
+| `--ftp-port` | `FTP_PORT` | Port for the FTP image upload server (default `2121`) |
+| `--ftp-users` | `FTP_USERS` | Allowed FTP users as `user:pass;user2:pass2`; each username must be in `device-channel` format (e.g. `casa-frontdoor:s3cret`). Leave empty to disable the FTP source. |
 | `--model-name` | `YOLO_MODEL` | YOLO model version |
 | `--facial-db` | `FACIAL_DB_PATH` | Directory path for DeepFace known identities |
 | `--min-confidence` | `MIN_CONFIDENCE` | Minimum confidence threshold (0.0-1.0) |

@@ -2,4 +2,5 @@ requests
 ultralytics
 deepface
 imapclient
+pyftpdlib
 google-genai

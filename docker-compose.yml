@@ -5,15 +5,22 @@ services:
     restart: always
     ports:
       - "5000:5000"
+      - "2121:2121"
     environment:
       # IMAP Configurations (Optional - leave empty or omit to disable IMAP push check)
       - EMAIL_ACCOUNT=${EMAIL_ACCOUNT:-}
       - EMAIL_PASSWORD=${EMAIL_PASSWORD:-}
       - IMAP_SERVER=${IMAP_SERVER:-imap.gmail.com}
-      - TARGET_FROM=${TARGET_FROM:-hmxcam@gmail.com}
-      - TARGET_SUBJECT=${TARGET_SUBJECT:-Alerta de su DVR --- Se ha detectado un movimiento}
+      - TARGET_FROM=${TARGET_FROM:-}
+      - TARGET_SUBJECT=${TARGET_SUBJECT:-}
       - IMAP_FOLDER=${IMAP_FOLDER:-INBOX}
       - DOWNLOAD_FOLDER=${DOWNLOAD_FOLDER:-/app/cam_attachments}
+
+      # FTP Configuration (Optional - leave FTP_USERS empty to disable the FTP source).
+      # Note: FTPS/passive-mode port forwarding isn't set up here, only the control port.
+      - FTP_HOST=${FTP_HOST:-0.0.0.0}
+      - FTP_PORT=${FTP_PORT:-2121}
+      - FTP_USERS=${FTP_USERS:-}
 
       # AI configurations
       - YOLO_MODEL=${YOLO_MODEL:-yolov8n.pt}

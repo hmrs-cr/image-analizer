@@ -17,6 +17,11 @@ def get_config():
     parser.add_argument("--imap-folder", default=os.environ.get("IMAP_FOLDER", "INBOX"), help="IMAP folder to monitor")
     parser.add_argument("--download-folder", default=os.environ.get("DOWNLOAD_FOLDER", "./cam_attachments"), help="Directory to save downloaded images")
 
+    # FTP Configuration
+    parser.add_argument("--ftp-host", default=os.environ.get("FTP_HOST", "0.0.0.0"), help="Host for the FTP image upload server")
+    parser.add_argument("--ftp-port", type=int, default=int(os.environ.get("FTP_PORT", "2121")), help="Port for the FTP image upload server")
+    parser.add_argument("--ftp-users", default=os.environ.get("FTP_USERS", ""), help="Allowed FTP users as 'user:pass;user2:pass2'; each username must be in 'device-channel' format")
+
     # AI Configuration
     parser.add_argument("--model-name", default=os.environ.get("YOLO_MODEL", "yolov8n.pt"), help="YOLO model version")
     parser.add_argument("--facial-db", default=os.environ.get("FACIAL_DB_PATH", ""), help="Directory path for DeepFace known identities")

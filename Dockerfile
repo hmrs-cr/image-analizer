@@ -16,6 +16,7 @@ RUN pip install --no-cache-dir \
     ultralytics \
 #    deepface \
     imapclient \
+    pyftpdlib \
     tf-keras \
     requests \
     google-genai
