@@ -1,5 +1,7 @@
 import os
+import queue
 import sys
+import threading
 import time
 
 from pyftpdlib.authorizers import DummyAuthorizer
@@ -76,6 +78,23 @@ class FtpImageSource(ImageSource):
         on_image = self.on_image
         chat_id = config.telegram_chat_id
 
+        # Analysis (YOLO/DeepFace/Gemini/Telegram) runs on a dedicated worker thread so it never
+        # blocks the FTP server's single-threaded async I/O loop -- otherwise every upload would
+        # stall behind the previous one's analysis time.
+        analysis_queue = queue.Queue()
+
+        def analysis_worker():
+            while True:
+                unique_path, device_name, channel_name = analysis_queue.get()
+                try:
+                    on_image(unique_path, device_name, channel_name, chat_id)
+                except Exception as e:
+                    print(f"FTP image analysis failed for {unique_path}: {e}", file=sys.stderr)
+                finally:
+                    analysis_queue.task_done()
+
+        threading.Thread(target=analysis_worker, daemon=True, name="FtpImageSource-analysis").start()
+
         class ImageUploadHandler(FTPHandler):
             def on_file_received(self, file):
                 if not file.lower().endswith((".jpg", ".jpeg")):
@@ -85,7 +104,7 @@ class FtpImageSource(ImageSource):
                 unique_path = os.path.join(directory, f"{int(time.time() * 1000)}_{filename}")
                 os.rename(file, unique_path)
                 print(f"FTP upload received: {unique_path}")
-                on_image(unique_path, device_name, channel_name, chat_id)
+                analysis_queue.put((unique_path, device_name, channel_name))
 
         ImageUploadHandler.authorizer = authorizer
 
