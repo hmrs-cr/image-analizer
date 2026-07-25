@@ -8,7 +8,7 @@ from pyftpdlib.authorizers import DummyAuthorizer
 from pyftpdlib.handlers import FTPHandler
 from pyftpdlib.servers import FTPServer
 
-from ..utils import get_camera_folder
+from ..utils import get_camera_folder, is_video_file
 from .base import ImageSource
 
 
@@ -55,7 +55,8 @@ class FtpImageSource(ImageSource):
     Each configured FTP user (see --ftp-users) is jailed to its own home directory under
     download_folder, named the same way IMAP-sourced cameras are (via get_camera_folder) so
     /api/image and the dashboard resolve it identically regardless of which source produced it.
-    Every uploaded JPG is handed to the shared analysis pipeline via on_image().
+    Every uploaded JPG/MP4 is handed to the shared on_image() callback, which routes videos
+    straight to a notification and skips analysis for them (see app.py's on_image).
     """
 
     @classmethod
@@ -97,8 +98,8 @@ class FtpImageSource(ImageSource):
 
         class ImageUploadHandler(FTPHandler):
             def on_file_received(self, file):
-                if not file.lower().endswith((".jpg", ".jpeg")):
-                    print(f"FTP upload received (non-image, skipping analysis): {file}")
+                if not (file.lower().endswith((".jpg", ".jpeg")) or is_video_file(file)):
+                    print(f"FTP upload received (unsupported type, skipping): {file}")
                     return
                 device_name, channel_name = user_cameras.get(self.username, ("DVR", "Camera"))
                 directory, filename = os.path.split(file)

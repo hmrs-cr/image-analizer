@@ -9,9 +9,9 @@ from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from .pipeline import analyze_image
+from .pipeline import analyze_image, handle_video
 from .stats import MAX_CACHE_SIZE, START_TIME, get_camera_stats, get_history_page, stats, stats_lock
-from .utils import get_camera_folder, mask_settings, sanitize_component
+from .utils import get_camera_folder, is_video_file, mask_settings, sanitize_component
 
 # image_analyzer/server.py -> image_analyzer/ -> repo root, where the static dashboard
 # files (index.html, style.css, app.js) live.
@@ -249,13 +249,20 @@ class UploadHandler(BaseHTTPRequestHandler):
                 with open(filepath, "wb") as f:
                     f.write(image_data)
 
-                detections_list = analyze_image(
-                    self.config, self.model, self.target_classes, filepath,
-                    device_name=device_name or "DVR", channel_name=channel_name or "Camera",
-                    chat_id=notify_chat
-                )
+                if is_video_file(filename):
+                    result = handle_video(
+                        self.config, filepath,
+                        device_name=device_name or "DVR", channel_name=channel_name or "Camera",
+                        chat_id=notify_chat
+                    )
+                else:
+                    result = analyze_image(
+                        self.config, self.model, self.target_classes, filepath,
+                        device_name=device_name or "DVR", channel_name=channel_name or "Camera",
+                        chat_id=notify_chat
+                    )
 
-                self.send_json(detections_list)
+                self.send_json(result)
 
             except Exception as e:
                 self.send_response(500)

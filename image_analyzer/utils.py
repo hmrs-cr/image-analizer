@@ -6,6 +6,14 @@ SENSITIVE_SETTINGS_KEYS = ("password", "key", "token", "secret")
 # fully redacted rather than partially revealed via the last-4-chars behavior below.
 FULLY_SENSITIVE_KEYS = ("ftp_users",)
 
+# Clip attachments/uploads matching these extensions skip the YOLO/DeepFace/Gemini pipeline
+# entirely (those models only support still images) and are relayed straight to Telegram.
+VIDEO_EXTENSIONS = (".mp4",)
+
+
+def is_video_file(filename):
+    return (filename or "").lower().endswith(VIDEO_EXTENSIONS)
+
 
 def sanitize_component(value):
     safe = re.sub(r'[^A-Za-z0-9_.-]+', '_', value or '')

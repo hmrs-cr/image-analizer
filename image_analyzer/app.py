@@ -5,10 +5,11 @@ from http.server import ThreadingHTTPServer
 from ultralytics import YOLO
 
 from .config import get_config
-from .pipeline import analyze_image
+from .pipeline import analyze_image, handle_video
 from .server import UploadHandler
 from .sources import AVAILABLE_SOURCES
 from .stats import load_history_from_disk, prune_old_images
+from .utils import is_video_file
 
 
 def start_sources(config, on_image):
@@ -39,7 +40,10 @@ def main():
     TARGET_CLASSES = [name_to_id[n.strip().lower()] for n in config.classes.split(",") if n.strip() and n.strip().lower() in name_to_id]
 
     def on_image(filepath, device_name, channel_name, chat_id):
-        analyze_image(config, model, TARGET_CLASSES, filepath, device_name=device_name, channel_name=channel_name, chat_id=chat_id)
+        if is_video_file(filepath):
+            handle_video(config, filepath, device_name=device_name, channel_name=channel_name, chat_id=chat_id)
+        else:
+            analyze_image(config, model, TARGET_CLASSES, filepath, device_name=device_name, channel_name=channel_name, chat_id=chat_id)
 
     start_sources(config, on_image)
 

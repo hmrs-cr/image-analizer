@@ -7,7 +7,7 @@ from email.header import decode_header
 
 from imapclient import IMAPClient
 
-from ..utils import get_camera_folder
+from ..utils import get_camera_folder, is_video_file
 from .base import ImageSource
 
 
@@ -43,7 +43,8 @@ def parse_email_body(body_text):
 
 class ImapEmailSource(ImageSource):
     """Watches a Gmail (or other IMAP) inbox for DVR motion-alert emails and hands off
-    each JPG attachment to the shared analysis pipeline via on_image().
+    each JPG/MP4 attachment to the shared on_image() callback, which routes videos straight
+    to a notification and skips analysis for them (see app.py's on_image).
     """
 
     @classmethod
@@ -87,7 +88,7 @@ class ImapEmailSource(ImageSource):
                 filename = decoded[0].decode(decoded[1]) if decoded[1] else decoded[0]
                 if isinstance(filename, bytes): filename = filename.decode('utf-8')
 
-            if filename and filename.lower().endswith((".jpg", ".jpeg")):
+            if filename and (filename.lower().endswith((".jpg", ".jpeg")) or is_video_file(filename)):
                 unique_filename = f"{msg_id}_{filename}"
                 filepath = os.path.join(config.download_folder, unique_filename)
 

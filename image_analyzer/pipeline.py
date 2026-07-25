@@ -10,7 +10,7 @@ except ImportError:
     DEEPFACE_AVAILABLE = False
 
 from .gemini import get_gemini_description
-from .notify import send_telegram_alert
+from .notify import send_telegram_alert, send_telegram_video
 from .stats import (
     MAX_CACHE_SIZE,
     get_camera_stats,
@@ -19,6 +19,33 @@ from .stats import (
     stats,
     stats_lock,
 )
+
+
+def handle_video(config, video_path, device_name="DVR", channel_name="Camera", chat_id=None):
+    """Relays a video clip (e.g. an mp4 motion-alert attachment) straight to Telegram.
+
+    YOLO/DeepFace/Gemini only operate on still images, so videos skip the analysis
+    pipeline entirely and are just forwarded as a notification when a chat ID is configured.
+    """
+    maybe_prune_old_images(config)
+    print(f"Received video: {video_path}", file=sys.stderr)
+
+    if " " in device_name and channel_name == "Camera":
+        parts = device_name.split(" ", 1)
+        if len(parts) == 2:
+            channel_name = parts[0]
+            device_name = parts[1]
+
+    location_context = f"{channel_name} {device_name}"
+    caption = f"*Video* en *{location_context}*"
+
+    notified = False
+    if chat_id:
+        notified = send_telegram_video(config, video_path, caption, chat_id)
+    else:
+        print("Telegram notification bypassed: no chat ID provided.", file=sys.stderr)
+
+    return {"video": True, "notified": notified}
 
 
 def analyze_image(config, model, TARGET_CLASSES, img_path, device_name="DVR", channel_name="Camera", chat_id=None):
