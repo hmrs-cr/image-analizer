@@ -12,6 +12,10 @@ RETENTION_SECONDS = 48 * 60 * 60
 # In-memory cache size only. Disk retention is governed solely by RETENTION_SECONDS
 # (see prune_old_images); this cap does not delete anything from disk.
 MAX_CACHE_SIZE = 100
+# Minimum time between prune_old_images runs triggered from the analyze_image hot path.
+# Retention is 48h-scale, so per-image pruning granularity is unnecessary; this keeps the
+# tree walk from running on every single analyzed image.
+PRUNE_MIN_INTERVAL_SECONDS = 5 * 60
 
 stats = {
     "global": {
@@ -29,6 +33,12 @@ stats = {
 # Guards `stats`, which is mutated both by the IMAP background thread and by
 # per-request HTTP handler threads (ThreadingHTTPServer spawns one per request).
 stats_lock = threading.RLock()
+
+# Guards the throttling check in maybe_prune_old_images; last run defaults to process
+# start so a burst of images right after boot doesn't immediately re-trigger the prune
+# app.py already ran synchronously before serving started.
+_last_prune_time = START_TIME
+_prune_lock = threading.Lock()
 
 
 def get_camera_stats(camera_id):
@@ -64,6 +74,22 @@ def prune_old_images(config, now=None):
     if deleted_count:
         print(f"Pruned {deleted_count} image(s) older than 24 hours.", file=sys.stderr)
     return deleted_count
+
+
+def maybe_prune_old_images(config):
+    """Runs prune_old_images in a background thread, throttled to at most once every
+    PRUNE_MIN_INTERVAL_SECONDS. analyze_image is the shared sink for every incoming image
+    (IMAP thread and the /analyze-image HTTP handler alike), so calling prune_old_images
+    from there directly would walk and stat the entire download tree on every single
+    image; the cost scales with disk history, not with the image being analyzed.
+    """
+    global _last_prune_time
+    with _prune_lock:
+        now = time.time()
+        if now - _last_prune_time < PRUNE_MIN_INTERVAL_SECONDS:
+            return
+        _last_prune_time = now
+    threading.Thread(target=prune_old_images, args=(config,), daemon=True).start()
 
 
 def sidecar_path_for(img_path):

@@ -14,7 +14,7 @@ from .notify import send_telegram_alert
 from .stats import (
     MAX_CACHE_SIZE,
     get_camera_stats,
-    prune_old_images,
+    maybe_prune_old_images,
     save_detection_sidecar,
     stats,
     stats_lock,
@@ -26,7 +26,7 @@ def analyze_image(config, model, TARGET_CLASSES, img_path, device_name="DVR", ch
 
     This is the single sink every image source (IMAP, HTTP upload, ...) converges on.
     """
-    prune_old_images(config)
+    maybe_prune_old_images(config)
     print(f"Analyzing image: {img_path}", file=sys.stderr)
 
     # Handle older string positional args safely
