@@ -24,6 +24,21 @@ def parse_ftp_users(raw):
     return users
 
 
+def parse_passive_ports(raw):
+    """Parses the '--ftp-passive-ports'/FTP_PASSIVE_PORTS 'start-end' format into a range, or None."""
+    raw = (raw or "").strip()
+    if not raw or "-" not in raw:
+        return None
+    start, end = raw.split("-", 1)
+    try:
+        start, end = int(start.strip()), int(end.strip())
+    except ValueError:
+        return None
+    if start > end:
+        return None
+    return range(start, end + 1)
+
+
 def parse_device_channel(username):
     """Splits a 'device-channel' formatted FTP username into (device_name, channel_name)."""
     if "-" in username:
@@ -73,6 +88,14 @@ class FtpImageSource(ImageSource):
                 on_image(unique_path, device_name, channel_name, chat_id)
 
         ImageUploadHandler.authorizer = authorizer
+
+        passive_ports = parse_passive_ports(getattr(config, "ftp_passive_ports", ""))
+        if passive_ports:
+            ImageUploadHandler.passive_ports = passive_ports
+
+        masquerade_address = getattr(config, "ftp_masquerade_address", "")
+        if masquerade_address:
+            ImageUploadHandler.masquerade_address = masquerade_address
 
         host = config.ftp_host
         port = config.ftp_port

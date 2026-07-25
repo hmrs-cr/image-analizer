@@ -6,6 +6,7 @@ services:
     ports:
       - "5000:5000"
       - "2121:2121"
+      - "${FTP_PASSIVE_PORTS:-30000-30009}:${FTP_PASSIVE_PORTS:-30000-30009}"
     environment:
       # IMAP Configurations (Optional - leave empty or omit to disable IMAP push check)
       - EMAIL_ACCOUNT=${EMAIL_ACCOUNT:-}
@@ -17,10 +18,13 @@ services:
       - DOWNLOAD_FOLDER=${DOWNLOAD_FOLDER:-/app/cam_attachments}
 
       # FTP Configuration (Optional - leave FTP_USERS empty to disable the FTP source).
-      # Note: FTPS/passive-mode port forwarding isn't set up here, only the control port.
+      # FTP_MASQUERADE_ADDRESS must be set to this host's externally-reachable IP/hostname
+      # for passive-mode uploads (e.g. from a real DVR) to work through Docker's NAT.
       - FTP_HOST=${FTP_HOST:-0.0.0.0}
       - FTP_PORT=${FTP_PORT:-2121}
       - FTP_USERS=${FTP_USERS:-}
+      - FTP_PASSIVE_PORTS=${FTP_PASSIVE_PORTS:-30000-30009}
+      - FTP_MASQUERADE_ADDRESS=${FTP_MASQUERADE_ADDRESS:-}
 
       # AI configurations
       - YOLO_MODEL=${YOLO_MODEL:-yolov8n.pt}
