@@ -98,6 +98,7 @@ class FtpImageSource(ImageSource):
         class ImageUploadHandler(FTPHandler):
             def on_file_received(self, file):
                 if not file.lower().endswith((".jpg", ".jpeg")):
+                    print(f"FTP upload received (non-image, skipping analysis): {file}")
                     return
                 device_name, channel_name = user_cameras.get(self.username, ("DVR", "Camera"))
                 directory, filename = os.path.split(file)
