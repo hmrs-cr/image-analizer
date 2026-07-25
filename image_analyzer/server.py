@@ -186,7 +186,7 @@ class UploadHandler(BaseHTTPRequestHandler):
             if not self.check_shared_secret():
                 self.send_response(401)
                 self.end_headers()
-                self.wfile.write(b"Unauthorized: missing or invalid X-Analyze-Secret header")
+                self.wfile.write(b"Unauthorized")
                 return
 
             content_type = self.headers.get('Content-Type')
