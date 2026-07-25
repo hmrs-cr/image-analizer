@@ -21,8 +21,8 @@ def get_config():
     parser.add_argument("--ftp-host", default=os.environ.get("FTP_HOST", "0.0.0.0"), help="Host for the FTP image upload server")
     parser.add_argument("--ftp-port", type=int, default=int(os.environ.get("FTP_PORT", "2121")), help="Port for the FTP image upload server")
     parser.add_argument("--ftp-users", default=os.environ.get("FTP_USERS", ""), help="Allowed FTP users as 'user:pass;user2:pass2'; each username must be in 'device-channel' format")
-    parser.add_argument("--ftp-passive-ports", default=os.environ.get("FTP_PASSIVE_PORTS", "30000-30010"), help="Passive mode data port range as 'start-end' (e.g. '30000-30010'); required for FTP to work through Docker/NAT")
-    parser.add_argument("--ftp-masquerade-address", default=os.environ.get("FTP_MASQUERADE_ADDRESS", "192.168.10.10"), help="Public IP/hostname to advertise for passive mode connections when behind Docker/NAT")
+    parser.add_argument("--ftp-passive-ports", default=os.environ.get("FTP_PASSIVE_PORTS", ""), help="Passive mode data port range as 'start-end' (e.g. '30000-30010'); required for FTP to work through Docker/NAT")
+    parser.add_argument("--ftp-masquerade-address", default=os.environ.get("FTP_MASQUERADE_ADDRESS", ""), help="Public IP/hostname to advertise for passive mode connections when behind Docker/NAT")
 
     # AI Configuration
     parser.add_argument("--model-name", default=os.environ.get("YOLO_MODEL", "yolov8n.pt"), help="YOLO model version")
