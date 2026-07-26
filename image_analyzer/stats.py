@@ -286,13 +286,19 @@ def get_history_page(config, camera, offset, limit):
     if camera:
         camera_folders = [get_camera_folder(config, camera)]
     else:
+        # Camera folders are nested two levels deep (download_folder/<device>/<channel>),
+        # matching get_camera_folder, so collect the leaf (channel) directories.
         root = config.download_folder
         camera_folders = []
         if root and os.path.isdir(root):
-            camera_folders = [
-                os.path.join(root, name) for name in os.listdir(root)
-                if os.path.isdir(os.path.join(root, name))
-            ]
+            for device_name in os.listdir(root):
+                device_path = os.path.join(root, device_name)
+                if not os.path.isdir(device_path):
+                    continue
+                for channel_name in os.listdir(device_path):
+                    channel_path = os.path.join(device_path, channel_name)
+                    if os.path.isdir(channel_path):
+                        camera_folders.append(channel_path)
 
     disk_records = []
     for folder in camera_folders:

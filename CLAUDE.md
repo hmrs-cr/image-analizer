@@ -85,7 +85,8 @@ the repo root is just a shim that calls `image_analyzer.app.main()` (kept as the
   `ImapEmailSource` is the current (and only) implementation — it IDLEs on the configured IMAP
   folder and, on mail matching `--from-address`/`--subject`, parses the DVR's plaintext body
   (`parse_email_body`) for device/channel names and saves JPG attachments under
-  `download_folder/<sanitized camera id>/`. **To add a new source** (FTP, Dropbox, etc.): create
+  `download_folder/<device_name>/<channel_name>/` (see `get_camera_folder` in `utils.py`; each
+  segment is sanitized independently). **To add a new source** (FTP, Dropbox, etc.): create
   `sources/<name>_source.py` with a class implementing `ImageSource`, then add it to the
   `AVAILABLE_SOURCES` list in `sources/__init__.py` — no changes needed anywhere else, since sources
   never import `pipeline.py` directly, only call the `on_image` callback `app.py` hands them.

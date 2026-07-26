@@ -21,7 +21,7 @@ from .stats import (
     stats,
     stats_lock,
 )
-from .utils import get_camera_folder, is_video_file, mask_settings, sanitize_component
+from .utils import get_camera_folder, is_video_file, mask_settings
 
 # image_analyzer/server.py -> image_analyzer/ -> repo root, where the static dashboard
 # files (index.html, style.css, app.js) live.
@@ -131,9 +131,8 @@ class UploadHandler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(b"Bad Request: camera and file required")
                 return
-            safe_camera = sanitize_component(unquote(camera))
             safe_filename = os.path.basename(unquote(filename))
-            camera_folder = os.path.join(self.config.download_folder, safe_camera)
+            camera_folder = get_camera_folder(self.config, unquote(camera))
             image_path = os.path.join(camera_folder, safe_filename)
             if os.path.exists(image_path):
                 self.serve_file(image_path, "image/jpeg")

@@ -37,4 +37,10 @@ def mask_settings(config):
 
 
 def get_camera_folder(config, camera_id):
-    return os.path.join(config.download_folder, sanitize_component(camera_id))
+    """Maps a "{device_name} - {channel_name}" camera_id to its on-disk storage folder:
+    download_folder/<device_name>/<channel_name>, each path segment sanitized independently
+    so one can't escape into the other's directory level.
+    """
+    device_name, _, channel_name = camera_id.partition(" - ")
+    channel_name = channel_name or "Camera"
+    return os.path.join(config.download_folder, sanitize_component(device_name), sanitize_component(channel_name))
