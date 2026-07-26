@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const cameraSummaryAnalyzed = document.getElementById('camera-summary-analyzed');
     const cameraSummaryMatches = document.getElementById('camera-summary-matches');
     const cameraSummaryAlerts = document.getElementById('camera-summary-alerts');
+    const globalSnoozeBtn = document.getElementById('global-snooze-btn');
 
     const snoozeStatusText = document.getElementById('snooze-status-text');
     const snoozeStatusBar = document.getElementById('snooze-status');
@@ -198,6 +199,13 @@ document.addEventListener('DOMContentLoaded', () => {
         ];
     }
 
+    function getMockSnooze() {
+        return {
+            picture: { remaining: 0, forever: false },
+            video: { remaining: 0, forever: false }
+        };
+    }
+
     function getMockStatusData() {
         return {
             uptime: 13200,
@@ -205,18 +213,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 pictures_analyzed: 42,
                 matches_found: 19,
                 notifications_sent: 11,
-                snooze_remaining: 0
+                snooze: getMockSnooze()
             },
             cameras: {
-                'Galeron - Front Door': { pictures_analyzed: 18, matches_found: 9, notifications_sent: 5, snooze_remaining: 0 },
-                'Galeron - Back Yard': { pictures_analyzed: 14, matches_found: 6, notifications_sent: 3, snooze_remaining: 0 },
-                'Galeron - Garage': { pictures_analyzed: 10, matches_found: 4, notifications_sent: 3, snooze_remaining: 0 },
-                'Casa - Front Door': { pictures_analyzed: 18, matches_found: 9, notifications_sent: 5, snooze_remaining: 0 },
-                'Casa - Back Yard': { pictures_analyzed: 14, matches_found: 6, notifications_sent: 3, snooze_remaining: 0 },
-                'Casa - Garage': { pictures_analyzed: 10, matches_found: 4, notifications_sent: 3, snooze_remaining: 0 },
-                'Otra - Front Door': { pictures_analyzed: 18, matches_found: 9, notifications_sent: 5, snooze_remaining: 0 },
-                'Otra - Back Yard': { pictures_analyzed: 14, matches_found: 6, notifications_sent: 3, snooze_remaining: 0 },
-                'Otra - Garage': { pictures_analyzed: 10, matches_found: 4, notifications_sent: 3, snooze_remaining: 0 }
+                'Galeron - Front Door': { pictures_analyzed: 18, matches_found: 9, notifications_sent: 5, snooze: getMockSnooze() },
+                'Galeron - Back Yard': { pictures_analyzed: 14, matches_found: 6, notifications_sent: 3, snooze: getMockSnooze() },
+                'Galeron - Garage': { pictures_analyzed: 10, matches_found: 4, notifications_sent: 3, snooze: getMockSnooze() },
+                'Casa - Front Door': { pictures_analyzed: 18, matches_found: 9, notifications_sent: 5, snooze: getMockSnooze() },
+                'Casa - Back Yard': { pictures_analyzed: 14, matches_found: 6, notifications_sent: 3, snooze: getMockSnooze() },
+                'Casa - Garage': { pictures_analyzed: 10, matches_found: 4, notifications_sent: 3, snooze: getMockSnooze() },
+                'Otra - Front Door': { pictures_analyzed: 18, matches_found: 9, notifications_sent: 5, snooze: getMockSnooze() },
+                'Otra - Back Yard': { pictures_analyzed: 14, matches_found: 6, notifications_sent: 3, snooze: getMockSnooze() },
+                'Otra - Garage': { pictures_analyzed: 10, matches_found: 4, notifications_sent: 3, snooze: getMockSnooze() }
             },
             last_detection: {
                 timestamp: Math.floor(Date.now() / 1000) - 30,
@@ -350,6 +358,24 @@ document.addEventListener('DOMContentLoaded', () => {
         return entries;
     }
 
+    // Renders one media type's snooze sub-status ({remaining, forever}) as a short label.
+    function formatMediaSnooze(status) {
+        if (!status) return 'Active';
+        if (status.forever) return '∞';
+        if (status.remaining > 0) return `${Math.ceil(status.remaining / 60)}m`;
+        return 'Active';
+    }
+
+    function isSnoozeActive(snooze) {
+        if (!snooze) return false;
+        return ['picture', 'video'].some(t => snooze[t] && (snooze[t].forever || snooze[t].remaining > 0));
+    }
+
+    function formatSnoozeCellLabel(snooze) {
+        if (!snooze) return 'Active';
+        return `📷 ${formatMediaSnooze(snooze.picture)} · 🎥 ${formatMediaSnooze(snooze.video)}`;
+    }
+
     function updateCamerasStatsTable(cameras) {
         const searchTerm = (cameraSearchInput?.value || '').trim().toLowerCase();
         const treeEntries = getCameraTreeEntries(cameras, searchTerm);
@@ -397,8 +423,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const name = entry.name;
             const cam = cameras[name];
-            const snoozeText = cam.snooze_remaining > 0 ? `Snoozed (${Math.ceil(cam.snooze_remaining / 60)}m)` : 'Active';
-            const snoozeColor = cam.snooze_remaining > 0 ? 'var(--warning)' : 'var(--success)';
+            const snoozeText = formatSnoozeCellLabel(cam.snooze);
+            const snoozeColor = isSnoozeActive(cam.snooze) ? 'var(--warning)' : 'var(--success)';
 
             html += `
                 <tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.03);">
@@ -407,7 +433,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td style="padding: 8px 0; text-align: center; color: var(--accent);">${cam.matches_found}</td>
                     <td style="padding: 8px 0; text-align: center; color: var(--primary);">${cam.notifications_sent}</td>
                     <td style="padding: 8px 0; text-align: right;">
-                        <button class="snooze-cell-btn" data-camera="${name}" data-snooze="${cam.snooze_remaining}" style="background:none;border:none;color:${snoozeColor};font-weight:500;cursor:pointer;">${snoozeText}</button>
+                        <button class="snooze-cell-btn" data-camera="${name}" style="background:none;border:none;color:${snoozeColor};font-weight:500;cursor:pointer;">${snoozeText}</button>
                     </td>
                 </tr>
             `;
@@ -456,11 +482,21 @@ document.addEventListener('DOMContentLoaded', () => {
         snoozeMenu.style.borderRadius = '6px';
         snoozeMenu.style.boxShadow = '0 6px 14px rgba(0,0,0,0.4)';
         snoozeMenu.innerHTML = `
-            <div style="display:flex; gap:8px;">
-                <button class="btn btn-secondary pop-snooze" data-minutes="10">10m</button>
-                <button class="btn btn-secondary pop-snooze" data-minutes="60">1h</button>
-                <button class="btn btn-secondary pop-snooze" data-minutes="240">4h</button>
-                <button class="btn btn-outline pop-cancel" style="margin-left:8px;">Cancel</button>
+            <div style="display:flex; flex-direction:column; gap:10px; min-width:250px;">
+                ${['picture', 'video'].map(mediaType => `
+                    <div>
+                        <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:4px;">
+                            ${mediaType === 'picture' ? '📷 Pictures' : '🎥 Videos'}
+                        </div>
+                        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                            <button class="btn btn-secondary pop-snooze" data-media="${mediaType}" data-minutes="10">10m</button>
+                            <button class="btn btn-secondary pop-snooze" data-media="${mediaType}" data-minutes="60">1h</button>
+                            <button class="btn btn-secondary pop-snooze" data-media="${mediaType}" data-minutes="240">4h</button>
+                            <button class="btn btn-secondary pop-snooze" data-media="${mediaType}" data-minutes="forever">Forever</button>
+                            <button class="btn btn-outline pop-cancel" data-media="${mediaType}">Cancel</button>
+                        </div>
+                    </div>
+                `).join('')}
             </div>
         `;
         document.body.appendChild(snoozeMenu);
@@ -478,33 +514,38 @@ document.addEventListener('DOMContentLoaded', () => {
         // Wire buttons
         snoozeMenu.querySelectorAll('.pop-snooze').forEach(b => {
             b.onclick = async () => {
-                const minutes = parseInt(b.dataset.minutes, 10);
-                await sendSnooze(camera, minutes);
+                const minutes = b.dataset.minutes === 'forever' ? 'forever' : parseInt(b.dataset.minutes, 10);
+                await sendSnooze(camera, minutes, b.dataset.media);
                 hideSnoozeMenu();
             };
         });
-        snoozeMenu.querySelector('.pop-cancel').onclick = async () => {
-            await sendSnooze(camera, 0);
-            hideSnoozeMenu();
-        };
+        snoozeMenu.querySelectorAll('.pop-cancel').forEach(b => {
+            b.onclick = async () => {
+                await sendSnooze(camera, 0, b.dataset.media);
+                hideSnoozeMenu();
+            };
+        });
     }
 
     function hideSnoozeMenu() {
         if (snoozeMenu) snoozeMenu.style.display = 'none';
     }
 
-    // Send snooze API call for a specific camera
-    async function sendSnooze(camera, minutes) {
+    // Send snooze API call for a specific camera ('all' for global) and media type
+    // ('picture', 'video', or 'all' for both).
+    async function sendSnooze(camera, minutes, mediaType = 'all') {
         try {
             const response = await fetch('/api/snooze', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ minutes, camera })
+                body: JSON.stringify({ minutes, camera, media_type: mediaType })
             });
             if (!response.ok) throw new Error('snooze failed');
             const targetText = camera === 'all' ? 'All cameras' : `Camera "${camera}"`;
-            if (minutes === 0) showToast(`Snooze cancelled for ${targetText}`, 'success');
-            else showToast(`${targetText} snoozed for ${minutes} minutes`, 'warning');
+            const mediaText = mediaType === 'all' ? '' : ` (${mediaType}s)`;
+            if (minutes === 0) showToast(`Snooze cancelled for ${targetText}${mediaText}`, 'success');
+            else if (minutes === 'forever') showToast(`${targetText}${mediaText} snoozed forever`, 'warning');
+            else showToast(`${targetText}${mediaText} snoozed for ${minutes} minutes`, 'warning');
             fetchStatus();
         } catch (err) {
             showToast('Failed to apply snooze', 'error');
@@ -798,6 +839,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (cameraSummaryMatches) cameraSummaryMatches.textContent = totalMatches;
             if (cameraSummaryAlerts) cameraSummaryAlerts.textContent = totalAlerts;
 
+            // Global snooze status (footer row)
+            if (globalSnoozeBtn && data.global) {
+                globalSnoozeBtn.textContent = formatSnoozeCellLabel(data.global.snooze);
+                globalSnoozeBtn.style.color = isSnoozeActive(data.global.snooze) ? 'var(--warning)' : 'var(--success)';
+            }
+
             // Cameras Stats & Dropdown Select Option Updates
             updateCamerasStatsTable(data.cameras);
             setTableCameraSelection();
@@ -880,6 +927,13 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
+
+    if (globalSnoozeBtn) {
+        globalSnoozeBtn.addEventListener('click', (e) => {
+            showSnoozeMenu('all', globalSnoozeBtn);
+            e.stopPropagation();
+        });
+    }
 
     if (cameraSearchInput) {
         cameraSearchInput.addEventListener('input', () => {

@@ -10,7 +10,17 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from .pipeline import analyze_image, handle_video
-from .stats import MAX_CACHE_SIZE, START_TIME, get_camera_stats, get_history_page, stats, stats_lock
+from .stats import (
+    FOREVER_SNOOZE_UNTIL,
+    MAX_CACHE_SIZE,
+    START_TIME,
+    get_history_page,
+    save_snooze_state,
+    set_snooze,
+    snooze_status,
+    stats,
+    stats_lock,
+)
 from .utils import get_camera_folder, is_video_file, mask_settings, sanitize_component
 
 # image_analyzer/server.py -> image_analyzer/ -> repo root, where the static dashboard
@@ -85,7 +95,7 @@ class UploadHandler(BaseHTTPRequestHandler):
                         "pictures_analyzed": cam_stat["pictures_analyzed"],
                         "matches_found": cam_stat["matches_found"],
                         "notifications_sent": cam_stat["notifications_sent"],
-                        "snooze_remaining": max(0, int(cam_stat["snooze_until"] - time.time()))
+                        "snooze": snooze_status(cam_stat["snooze"])
                     }
 
                 data = {
@@ -94,7 +104,7 @@ class UploadHandler(BaseHTTPRequestHandler):
                         "pictures_analyzed": stats["global"]["pictures_analyzed"],
                         "matches_found": stats["global"]["matches_found"],
                         "notifications_sent": stats["global"]["notifications_sent"],
-                        "snooze_remaining": max(0, int(stats["global"]["snooze_until"] - time.time()))
+                        "snooze": snooze_status(stats["global"]["snooze"])
                     },
                     "cameras": cameras_data,
                     "last_detection": stats["last_detection"]
@@ -274,20 +284,26 @@ class UploadHandler(BaseHTTPRequestHandler):
                 content_length = int(self.headers.get('Content-Length', 0))
                 body = self.rfile.read(content_length).decode('utf-8')
                 data = json.loads(body)
-                minutes = int(data.get("minutes", 0))
+                minutes = data.get("minutes", 0)
                 camera = data.get("camera", "all")
+                media_type = data.get("media_type", "all")
 
-                until_time = time.time() + (minutes * 60) if minutes > 0 else 0.0
+                if media_type not in ("picture", "video", "all"):
+                    self.send_response(400)
+                    self.end_headers()
+                    self.wfile.write(b"Bad Request: media_type must be 'picture', 'video', or 'all'")
+                    return
 
-                if camera == "all":
-                    with stats_lock:
-                        stats["global"]["snooze_until"] = until_time
+                if minutes == "forever":
+                    until_time = FOREVER_SNOOZE_UNTIL
                 else:
-                    cam_stats = get_camera_stats(camera)
-                    with stats_lock:
-                        cam_stats["snooze_until"] = until_time
+                    minutes = float(minutes)
+                    until_time = time.time() + (minutes * 60) if minutes > 0 else 0.0
 
-                self.send_json({"status": "success", "camera": camera, "snooze_until": until_time})
+                set_snooze(camera, media_type, until_time)
+                save_snooze_state(self.config)
+
+                self.send_json({"status": "success", "camera": camera, "media_type": media_type, "snooze_until": until_time})
             except Exception as e:
                 self.send_response(500)
                 self.end_headers()

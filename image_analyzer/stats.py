@@ -17,12 +17,24 @@ MAX_CACHE_SIZE = 100
 # tree walk from running on every single analyzed image.
 PRUNE_MIN_INTERVAL_SECONDS = 5 * 60
 
+MEDIA_TYPES = ("picture", "video")
+# Sentinel "snoozed until" timestamp for the indefinite ("Forever") snooze option. Using a
+# real (if distant) timestamp rather than float('inf') keeps it a plain JSON number -- both
+# in /api/status and in the on-disk snooze_state.json -- with no special-case (de)serialization.
+FOREVER_SNOOZE_UNTIL = 4102444800.0  # 2100-01-01T00:00:00Z
+SNOOZE_STATE_FILENAME = "snooze_state.json"
+
+
+def _new_snooze_state():
+    return {t: 0.0 for t in MEDIA_TYPES}
+
+
 stats = {
     "global": {
         "pictures_analyzed": 0,
         "matches_found": 0,
         "notifications_sent": 0,
-        "snooze_until": 0.0
+        "snooze": _new_snooze_state()
     },
     "cameras": {},
     "history": {},
@@ -48,9 +60,101 @@ def get_camera_stats(camera_id):
                 "pictures_analyzed": 0,
                 "matches_found": 0,
                 "notifications_sent": 0,
-                "snooze_until": 0.0
+                "snooze": _new_snooze_state()
             }
         return stats["cameras"][camera_id]
+
+
+def is_snoozed(camera_id, media_type):
+    """Whether notifications for this camera/media_type are currently snoozed, checking
+    both the per-camera and global snooze settings."""
+    now = time.time()
+    with stats_lock:
+        cam_snooze = get_camera_stats(camera_id)["snooze"][media_type]
+        global_snooze = stats["global"]["snooze"][media_type]
+    return now < cam_snooze or now < global_snooze
+
+
+def set_snooze(camera, media_type, until_time):
+    """Sets snooze_until for `camera` ('all' for the global setting) and `media_type`
+    ('picture', 'video', or 'all' for both). Returns the updated snooze sub-dict."""
+    types = MEDIA_TYPES if media_type == "all" else (media_type,)
+    for t in types:
+        if t not in MEDIA_TYPES:
+            raise ValueError(f"Unknown media_type: {media_type}")
+    with stats_lock:
+        target = stats["global"]["snooze"] if camera == "all" else get_camera_stats(camera)["snooze"]
+        for t in types:
+            target[t] = until_time
+        return dict(target)
+
+
+def snooze_status(snooze_dict):
+    """Renders a snooze sub-dict ({"picture": until, "video": until}) into the
+    remaining-seconds/forever shape the dashboard consumes."""
+    now = time.time()
+    status = {}
+    for t in MEDIA_TYPES:
+        until = snooze_dict.get(t, 0.0)
+        status[t] = {
+            "remaining": max(0, int(until - now)) if until > now else 0,
+            "forever": until >= FOREVER_SNOOZE_UNTIL
+        }
+    return status
+
+
+def snooze_state_path(config):
+    return os.path.join(config.download_folder, SNOOZE_STATE_FILENAME)
+
+
+def save_snooze_state(config):
+    """Persists global + per-camera snooze settings so they survive a restart."""
+    if not config.download_folder:
+        return
+    with stats_lock:
+        state = {
+            "global": dict(stats["global"]["snooze"]),
+            "cameras": {cam_id: dict(cam["snooze"]) for cam_id, cam in stats["cameras"].items()}
+        }
+    try:
+        os.makedirs(config.download_folder, exist_ok=True)
+        path = snooze_state_path(config)
+        tmp_path = f"{path}.tmp"
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(state, f)
+        os.replace(tmp_path, path)  # atomic, so a crash mid-write can't corrupt the saved state
+    except Exception as e:
+        print(f"Failed to save snooze state: {e}", file=sys.stderr)
+
+
+def load_snooze_state(config):
+    """Restores global + per-camera snooze settings saved by save_snooze_state.
+
+    Call after load_history_from_disk so per-camera stats dicts already exist for every
+    camera with history; this only ever overlays the snooze sub-dict on top of them.
+    """
+    path = snooze_state_path(config)
+    if not os.path.exists(path):
+        return
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            state = json.load(f)
+    except Exception as e:
+        print(f"Failed to load snooze state: {e}", file=sys.stderr)
+        return
+
+    with stats_lock:
+        for t in MEDIA_TYPES:
+            if t in state.get("global", {}):
+                stats["global"]["snooze"][t] = state["global"][t]
+
+        for camera_id, snooze in state.get("cameras", {}).items():
+            cam_snooze = get_camera_stats(camera_id)["snooze"]
+            for t in MEDIA_TYPES:
+                if t in snooze:
+                    cam_snooze[t] = snooze[t]
+
+    print("Restored snooze state from disk.", file=sys.stderr)
 
 
 def prune_old_images(config, now=None):

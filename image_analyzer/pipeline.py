@@ -14,6 +14,7 @@ from .notify import send_telegram_alert, send_telegram_video
 from .stats import (
     MAX_CACHE_SIZE,
     get_camera_stats,
+    is_snoozed,
     maybe_prune_old_images,
     save_detection_sidecar,
     stats,
@@ -36,12 +37,20 @@ def handle_video(config, video_path, device_name="DVR", channel_name="Camera", c
             channel_name = parts[0]
             device_name = parts[1]
 
+    camera_id = f"{device_name} - {channel_name}"
     location_context = f"{channel_name} {device_name}"
     caption = f"*Video* en *{location_context}*"
 
+    cam_stats = get_camera_stats(camera_id)
     notified = False
-    if chat_id:
+    if is_snoozed(camera_id, "video"):
+        print(f"Video notifications are currently snoozed for camera {camera_id}. Bypassing Telegram notification.", file=sys.stderr)
+    elif chat_id:
         notified = send_telegram_video(config, video_path, caption, chat_id)
+        if notified:
+            with stats_lock:
+                stats["global"]["notifications_sent"] += 1
+                cam_stats["notifications_sent"] += 1
     else:
         print("Telegram notification bypassed: no chat ID provided.", file=sys.stderr)
 
@@ -142,11 +151,10 @@ def analyze_image(config, model, TARGET_CLASSES, img_path, device_name="DVR", ch
 
     # Determine snooze/notification outcome before persisting the entry, so the sidecar
     # and in-memory history record whether an alert actually went out.
-    with stats_lock:
-        is_snoozed = (time.time() < stats["global"]["snooze_until"]) or (time.time() < cam_stats["snooze_until"])
+    snoozed = is_snoozed(camera_id, "picture")
 
     notified = False
-    if is_snoozed:
+    if snoozed:
         print(f"Notifications are currently snoozed for camera {camera_id}. Bypassing Telegram notification.", file=sys.stderr)
     elif chat_id and is_match:
         notified = send_telegram_alert(config, img_path, caption, chat_id)

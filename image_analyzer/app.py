@@ -8,7 +8,7 @@ from .config import get_config
 from .pipeline import analyze_image, handle_video
 from .server import UploadHandler
 from .sources import AVAILABLE_SOURCES
-from .stats import load_history_from_disk, prune_old_images
+from .stats import load_history_from_disk, load_snooze_state, prune_old_images
 from .utils import is_video_file
 
 
@@ -32,6 +32,7 @@ def main():
 
     prune_old_images(config)
     load_history_from_disk(config)
+    load_snooze_state(config)
 
     print(f"Loading YOLO model ({config.model_name})...", file=sys.stderr)
     model = YOLO(config.model_name)
