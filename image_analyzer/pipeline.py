@@ -16,6 +16,7 @@ from .stats import (
     get_camera_stats,
     is_snoozed,
     maybe_prune_old_images,
+    resolve_notify_chat_id,
     save_detection_sidecar,
     stats,
     stats_lock,
@@ -42,17 +43,19 @@ def handle_video(config, video_path, device_name="DVR", channel_name="Camera", c
     caption = f"*Video* en *{location_context}*"
 
     cam_stats = get_camera_stats(camera_id)
+    effective_chat_id = resolve_notify_chat_id(camera_id, "video", chat_id, config)
+
     notified = False
     if is_snoozed(camera_id, "video"):
         print(f"Video notifications are currently snoozed for camera {camera_id}. Bypassing Telegram notification.", file=sys.stderr)
-    elif chat_id:
-        notified = send_telegram_video(config, video_path, caption, chat_id)
+    elif effective_chat_id:
+        notified = send_telegram_video(config, video_path, caption, effective_chat_id)
         if notified:
             with stats_lock:
                 stats["global"]["notifications_sent"] += 1
                 cam_stats["notifications_sent"] += 1
     else:
-        print("Telegram notification bypassed: no chat ID provided.", file=sys.stderr)
+        print("Telegram notification bypassed: no chat ID configured.", file=sys.stderr)
 
     return {"video": True, "notified": notified}
 
@@ -152,20 +155,21 @@ def analyze_image(config, model, TARGET_CLASSES, img_path, device_name="DVR", ch
     # Determine snooze/notification outcome before persisting the entry, so the sidecar
     # and in-memory history record whether an alert actually went out.
     snoozed = is_snoozed(camera_id, "picture")
+    effective_chat_id = resolve_notify_chat_id(camera_id, "picture", chat_id, config)
 
     notified = False
     if snoozed:
         print(f"Notifications are currently snoozed for camera {camera_id}. Bypassing Telegram notification.", file=sys.stderr)
-    elif chat_id and is_match:
-        notified = send_telegram_alert(config, img_path, caption, chat_id)
+    elif effective_chat_id and is_match:
+        notified = send_telegram_alert(config, img_path, caption, effective_chat_id)
         if notified:
             with stats_lock:
                 stats["global"]["notifications_sent"] += 1
                 cam_stats["notifications_sent"] += 1
-    elif chat_id and not is_match:
+    elif effective_chat_id and not is_match:
         print("No relevant targets detected; skipping Telegram notification.", file=sys.stderr)
     else:
-        print("Telegram notification bypassed: no chat ID provided.", file=sys.stderr)
+        print("Telegram notification bypassed: no chat ID configured.", file=sys.stderr)
 
     if not is_match:
         print("No relevant targets detected or confidence below threshold.", file=sys.stderr)

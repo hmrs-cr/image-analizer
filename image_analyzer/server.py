@@ -15,7 +15,8 @@ from .stats import (
     MAX_CACHE_SIZE,
     START_TIME,
     get_history_page,
-    save_snooze_state,
+    save_notification_settings,
+    set_notify_chat_id,
     set_snooze,
     snooze_status,
     stats,
@@ -95,7 +96,8 @@ class UploadHandler(BaseHTTPRequestHandler):
                         "pictures_analyzed": cam_stat["pictures_analyzed"],
                         "matches_found": cam_stat["matches_found"],
                         "notifications_sent": cam_stat["notifications_sent"],
-                        "snooze": snooze_status(cam_stat["snooze"])
+                        "snooze": snooze_status(cam_stat["snooze"]),
+                        "chat_id": dict(cam_stat["chat_id"])
                     }
 
                 data = {
@@ -104,7 +106,8 @@ class UploadHandler(BaseHTTPRequestHandler):
                         "pictures_analyzed": stats["global"]["pictures_analyzed"],
                         "matches_found": stats["global"]["matches_found"],
                         "notifications_sent": stats["global"]["notifications_sent"],
-                        "snooze": snooze_status(stats["global"]["snooze"])
+                        "snooze": snooze_status(stats["global"]["snooze"]),
+                        "chat_id": dict(stats["global"]["chat_id"])
                     },
                     "cameras": cameras_data,
                     "last_detection": stats["last_detection"]
@@ -300,9 +303,33 @@ class UploadHandler(BaseHTTPRequestHandler):
                     until_time = time.time() + (minutes * 60) if minutes > 0 else 0.0
 
                 set_snooze(camera, media_type, until_time)
-                save_snooze_state(self.config)
+                save_notification_settings(self.config)
 
                 self.send_json({"status": "success", "camera": camera, "media_type": media_type, "snooze_until": until_time})
+            except Exception as e:
+                self.send_response(500)
+                self.end_headers()
+                self.wfile.write(f'{{"error": "{str(e)}"}}'.encode('utf-8'))
+
+        elif self.path == "/api/notify-chat":
+            try:
+                content_length = int(self.headers.get('Content-Length', 0))
+                body = self.rfile.read(content_length).decode('utf-8')
+                data = json.loads(body)
+                camera = data.get("camera", "all")
+                media_type = data.get("media_type", "all")
+                chat_id_value = (data.get("chat_id") or "").strip()
+
+                if media_type not in ("picture", "video", "all"):
+                    self.send_response(400)
+                    self.end_headers()
+                    self.wfile.write(b"Bad Request: media_type must be 'picture', 'video', or 'all'")
+                    return
+
+                set_notify_chat_id(camera, media_type, chat_id_value)
+                save_notification_settings(self.config)
+
+                self.send_json({"status": "success", "camera": camera, "media_type": media_type, "chat_id": chat_id_value})
             except Exception as e:
                 self.send_response(500)
                 self.end_headers()

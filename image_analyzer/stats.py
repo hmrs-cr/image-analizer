@@ -20,13 +20,18 @@ PRUNE_MIN_INTERVAL_SECONDS = 5 * 60
 MEDIA_TYPES = ("picture", "video")
 # Sentinel "snoozed until" timestamp for the indefinite ("Forever") snooze option. Using a
 # real (if distant) timestamp rather than float('inf') keeps it a plain JSON number -- both
-# in /api/status and in the on-disk snooze_state.json -- with no special-case (de)serialization.
+# in /api/status and in the on-disk notification_settings.json -- with no special-case
+# (de)serialization.
 FOREVER_SNOOZE_UNTIL = 4102444800.0  # 2100-01-01T00:00:00Z
-SNOOZE_STATE_FILENAME = "snooze_state.json"
+NOTIFICATION_SETTINGS_FILENAME = "notification_settings.json"
 
 
 def _new_snooze_state():
     return {t: 0.0 for t in MEDIA_TYPES}
+
+
+def _new_chat_id_overrides():
+    return {t: "" for t in MEDIA_TYPES}
 
 
 stats = {
@@ -34,7 +39,8 @@ stats = {
         "pictures_analyzed": 0,
         "matches_found": 0,
         "notifications_sent": 0,
-        "snooze": _new_snooze_state()
+        "snooze": _new_snooze_state(),
+        "chat_id": _new_chat_id_overrides()
     },
     "cameras": {},
     "history": {},
@@ -60,7 +66,8 @@ def get_camera_stats(camera_id):
                 "pictures_analyzed": 0,
                 "matches_found": 0,
                 "notifications_sent": 0,
-                "snooze": _new_snooze_state()
+                "snooze": _new_snooze_state(),
+                "chat_id": _new_chat_id_overrides()
             }
         return stats["cameras"][camera_id]
 
@@ -103,58 +110,98 @@ def snooze_status(snooze_dict):
     return status
 
 
-def snooze_state_path(config):
-    return os.path.join(config.download_folder, SNOOZE_STATE_FILENAME)
+def set_notify_chat_id(camera, media_type, chat_id_value):
+    """Sets the notification chat-ID override for `camera` ('all' for the global setting)
+    and `media_type` ('picture', 'video', or 'all' for both). An empty string clears the
+    override, falling back to resolve_notify_chat_id's lower-priority sources. Returns the
+    updated chat_id sub-dict."""
+    types = MEDIA_TYPES if media_type == "all" else (media_type,)
+    for t in types:
+        if t not in MEDIA_TYPES:
+            raise ValueError(f"Unknown media_type: {media_type}")
+    with stats_lock:
+        target = stats["global"]["chat_id"] if camera == "all" else get_camera_stats(camera)["chat_id"]
+        for t in types:
+            target[t] = chat_id_value
+        return dict(target)
 
 
-def save_snooze_state(config):
-    """Persists global + per-camera snooze settings so they survive a restart."""
+def resolve_notify_chat_id(camera_id, media_type, fallback_chat_id, config):
+    """Resolves the Telegram chat ID to notify, in priority order: a per-camera override
+    for this media_type, then a global override, then whatever the caller passed in (e.g. a
+    source's own default or a per-request override), then finally the configured
+    --telegram-chat-id/TELEGRAM_CHAT_ID default."""
+    with stats_lock:
+        cam_override = get_camera_stats(camera_id)["chat_id"][media_type]
+        global_override = stats["global"]["chat_id"][media_type]
+    return cam_override or global_override or fallback_chat_id or config.telegram_chat_id
+
+
+def notification_settings_path(config):
+    return os.path.join(config.download_folder, NOTIFICATION_SETTINGS_FILENAME)
+
+
+def save_notification_settings(config):
+    """Persists global + per-camera snooze and chat-ID-override settings so they survive
+    a restart."""
     if not config.download_folder:
         return
     with stats_lock:
         state = {
-            "global": dict(stats["global"]["snooze"]),
-            "cameras": {cam_id: dict(cam["snooze"]) for cam_id, cam in stats["cameras"].items()}
+            "global": {
+                "snooze": dict(stats["global"]["snooze"]),
+                "chat_id": dict(stats["global"]["chat_id"])
+            },
+            "cameras": {
+                cam_id: {"snooze": dict(cam["snooze"]), "chat_id": dict(cam["chat_id"])}
+                for cam_id, cam in stats["cameras"].items()
+            }
         }
     try:
         os.makedirs(config.download_folder, exist_ok=True)
-        path = snooze_state_path(config)
+        path = notification_settings_path(config)
         tmp_path = f"{path}.tmp"
         with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(state, f)
         os.replace(tmp_path, path)  # atomic, so a crash mid-write can't corrupt the saved state
     except Exception as e:
-        print(f"Failed to save snooze state: {e}", file=sys.stderr)
+        print(f"Failed to save notification settings: {e}", file=sys.stderr)
 
 
-def load_snooze_state(config):
-    """Restores global + per-camera snooze settings saved by save_snooze_state.
+def load_notification_settings(config):
+    """Restores global + per-camera snooze and chat-ID-override settings saved by
+    save_notification_settings.
 
     Call after load_history_from_disk so per-camera stats dicts already exist for every
-    camera with history; this only ever overlays the snooze sub-dict on top of them.
+    camera with history; this only ever overlays the snooze/chat_id sub-dicts on top of them.
     """
-    path = snooze_state_path(config)
+    path = notification_settings_path(config)
     if not os.path.exists(path):
         return
     try:
         with open(path, "r", encoding="utf-8") as f:
             state = json.load(f)
     except Exception as e:
-        print(f"Failed to load snooze state: {e}", file=sys.stderr)
+        print(f"Failed to load notification settings: {e}", file=sys.stderr)
         return
 
     with stats_lock:
+        global_state = state.get("global", {})
         for t in MEDIA_TYPES:
-            if t in state.get("global", {}):
-                stats["global"]["snooze"][t] = state["global"][t]
+            if t in global_state.get("snooze", {}):
+                stats["global"]["snooze"][t] = global_state["snooze"][t]
+            if t in global_state.get("chat_id", {}):
+                stats["global"]["chat_id"][t] = global_state["chat_id"][t]
 
-        for camera_id, snooze in state.get("cameras", {}).items():
-            cam_snooze = get_camera_stats(camera_id)["snooze"]
+        for camera_id, cam_state in state.get("cameras", {}).items():
+            cam = get_camera_stats(camera_id)
             for t in MEDIA_TYPES:
-                if t in snooze:
-                    cam_snooze[t] = snooze[t]
+                if t in cam_state.get("snooze", {}):
+                    cam["snooze"][t] = cam_state["snooze"][t]
+                if t in cam_state.get("chat_id", {}):
+                    cam["chat_id"][t] = cam_state["chat_id"][t]
 
-    print("Restored snooze state from disk.", file=sys.stderr)
+    print("Restored notification settings from disk.", file=sys.stderr)
 
 
 def prune_old_images(config, now=None):

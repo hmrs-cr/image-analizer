@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const cameraSummaryAnalyzed = document.getElementById('camera-summary-analyzed');
     const cameraSummaryMatches = document.getElementById('camera-summary-matches');
     const cameraSummaryAlerts = document.getElementById('camera-summary-alerts');
-    const globalSnoozeBtn = document.getElementById('global-snooze-btn');
+    const globalNotificationsBtn = document.getElementById('global-notifications-btn');
 
     const snoozeStatusText = document.getElementById('snooze-status-text');
     const snoozeStatusBar = document.getElementById('snooze-status');
@@ -93,7 +93,8 @@ document.addEventListener('DOMContentLoaded', () => {
             subject: 'Mock motion alert',
             download_folder: './cam_attachments',
             model_name: 'yolov8n.pt',
-            gemini_model: 'gemini-3.5-flash'
+            gemini_model: 'gemini-3.5-flash',
+            telegram_chat_id: '123456789'
         };
     }
 
@@ -206,6 +207,10 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
+    function getMockChatId() {
+        return { picture: '', video: '' };
+    }
+
     function getMockStatusData() {
         return {
             uptime: 13200,
@@ -213,18 +218,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 pictures_analyzed: 42,
                 matches_found: 19,
                 notifications_sent: 11,
-                snooze: getMockSnooze()
+                snooze: getMockSnooze(),
+                chat_id: getMockChatId()
             },
             cameras: {
-                'Galeron - Front Door': { pictures_analyzed: 18, matches_found: 9, notifications_sent: 5, snooze: getMockSnooze() },
-                'Galeron - Back Yard': { pictures_analyzed: 14, matches_found: 6, notifications_sent: 3, snooze: getMockSnooze() },
-                'Galeron - Garage': { pictures_analyzed: 10, matches_found: 4, notifications_sent: 3, snooze: getMockSnooze() },
-                'Casa - Front Door': { pictures_analyzed: 18, matches_found: 9, notifications_sent: 5, snooze: getMockSnooze() },
-                'Casa - Back Yard': { pictures_analyzed: 14, matches_found: 6, notifications_sent: 3, snooze: getMockSnooze() },
-                'Casa - Garage': { pictures_analyzed: 10, matches_found: 4, notifications_sent: 3, snooze: getMockSnooze() },
-                'Otra - Front Door': { pictures_analyzed: 18, matches_found: 9, notifications_sent: 5, snooze: getMockSnooze() },
-                'Otra - Back Yard': { pictures_analyzed: 14, matches_found: 6, notifications_sent: 3, snooze: getMockSnooze() },
-                'Otra - Garage': { pictures_analyzed: 10, matches_found: 4, notifications_sent: 3, snooze: getMockSnooze() }
+                'Galeron - Front Door': { pictures_analyzed: 18, matches_found: 9, notifications_sent: 5, snooze: getMockSnooze(), chat_id: getMockChatId() },
+                'Galeron - Back Yard': { pictures_analyzed: 14, matches_found: 6, notifications_sent: 3, snooze: getMockSnooze(), chat_id: getMockChatId() },
+                'Galeron - Garage': { pictures_analyzed: 10, matches_found: 4, notifications_sent: 3, snooze: getMockSnooze(), chat_id: getMockChatId() },
+                'Casa - Front Door': { pictures_analyzed: 18, matches_found: 9, notifications_sent: 5, snooze: getMockSnooze(), chat_id: getMockChatId() },
+                'Casa - Back Yard': { pictures_analyzed: 14, matches_found: 6, notifications_sent: 3, snooze: getMockSnooze(), chat_id: getMockChatId() },
+                'Casa - Garage': { pictures_analyzed: 10, matches_found: 4, notifications_sent: 3, snooze: getMockSnooze(), chat_id: getMockChatId() },
+                'Otra - Front Door': { pictures_analyzed: 18, matches_found: 9, notifications_sent: 5, snooze: getMockSnooze(), chat_id: getMockChatId() },
+                'Otra - Back Yard': { pictures_analyzed: 14, matches_found: 6, notifications_sent: 3, snooze: getMockSnooze(), chat_id: getMockChatId() },
+                'Otra - Garage': { pictures_analyzed: 10, matches_found: 4, notifications_sent: 3, snooze: getMockSnooze(), chat_id: getMockChatId() }
             },
             last_detection: {
                 timestamp: Math.floor(Date.now() / 1000) - 30,
@@ -433,7 +439,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td style="padding: 8px 0; text-align: center; color: var(--accent);">${cam.matches_found}</td>
                     <td style="padding: 8px 0; text-align: center; color: var(--primary);">${cam.notifications_sent}</td>
                     <td style="padding: 8px 0; text-align: right;">
-                        <button class="snooze-cell-btn" data-camera="${name}" style="background:none;border:none;color:${snoozeColor};font-weight:500;cursor:pointer;">${snoozeText}</button>
+                        <button class="notifications-cell-btn" data-camera="${name}" style="background:none;border:none;color:${snoozeColor};font-weight:500;cursor:pointer;">${snoozeText}</button>
                     </td>
                 </tr>
             `;
@@ -460,33 +466,52 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateCamerasStatsTable(cameras);
             });
         });
-        document.querySelectorAll('.snooze-cell-btn').forEach(btn => {
+        document.querySelectorAll('.notifications-cell-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const camera = btn.dataset.camera;
-                showSnoozeMenu(camera, btn);
+                showNotificationsMenu(camera, btn, cameras[camera]);
                 e.stopPropagation();
             });
         });
     }
 
-    // In-place snooze menu (reused)
-    let snoozeMenu = null;
-    function createSnoozeMenu() {
-        snoozeMenu = document.createElement('div');
-        snoozeMenu.className = 'snooze-popover';
-        snoozeMenu.style.position = 'absolute';
-        snoozeMenu.style.zIndex = 9999;
-        snoozeMenu.style.background = 'var(--card-bg)';
-        snoozeMenu.style.border = '1px solid var(--card-border)';
-        snoozeMenu.style.padding = '8px';
-        snoozeMenu.style.borderRadius = '6px';
-        snoozeMenu.style.boxShadow = '0 6px 14px rgba(0,0,0,0.4)';
-        snoozeMenu.innerHTML = `
-            <div style="display:flex; flex-direction:column; gap:10px; min-width:250px;">
+    // Cached so every popover open doesn't re-fetch it; there's no UI that changes it at runtime.
+    let cachedDefaultChatId = null;
+    async function getDefaultChatId() {
+        if (cachedDefaultChatId !== null) return cachedDefaultChatId;
+        try {
+            const settings = useMockData ? getMockSettingsData() : await (await fetch('/api/settings')).json();
+            const val = settings.telegram_chat_id;
+            cachedDefaultChatId = (val && val !== 'Not Configured') ? val : '';
+        } catch (err) {
+            cachedDefaultChatId = '';
+        }
+        return cachedDefaultChatId;
+    }
+
+    // In-place notifications menu (reused): per media type, lets you snooze and/or
+    // redirect notifications to a specific Telegram chat ID for this camera ('all' for global).
+    let notificationsMenu = null;
+    function createNotificationsMenu() {
+        notificationsMenu = document.createElement('div');
+        notificationsMenu.className = 'notifications-popover';
+        notificationsMenu.style.position = 'absolute';
+        notificationsMenu.style.zIndex = 9999;
+        notificationsMenu.style.background = 'var(--card-bg)';
+        notificationsMenu.style.border = '1px solid var(--card-border)';
+        notificationsMenu.style.padding = '10px';
+        notificationsMenu.style.borderRadius = '6px';
+        notificationsMenu.style.boxShadow = '0 6px 14px rgba(0,0,0,0.4)';
+        notificationsMenu.innerHTML = `
+            <div style="display:flex; flex-direction:column; gap:12px; min-width:270px;">
                 ${['picture', 'video'].map(mediaType => `
                     <div>
                         <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:4px;">
                             ${mediaType === 'picture' ? '📷 Pictures' : '🎥 Videos'}
+                        </div>
+                        <div style="display:flex; gap:6px; margin-bottom:6px;">
+                            <input type="text" class="camera-search-input chat-id-input" data-media="${mediaType}" style="flex:1; width:auto;" placeholder="Chat ID">
+                            <button class="btn btn-secondary pop-save-chat" data-media="${mediaType}">Save</button>
                         </div>
                         <div style="display:flex; gap:6px; flex-wrap:wrap;">
                             <button class="btn btn-secondary pop-snooze" data-media="${mediaType}" data-minutes="10">10m</button>
@@ -499,36 +524,72 @@ document.addEventListener('DOMContentLoaded', () => {
                 `).join('')}
             </div>
         `;
-        document.body.appendChild(snoozeMenu);
-        snoozeMenu.addEventListener('click', (e) => e.stopPropagation());
+        document.body.appendChild(notificationsMenu);
+        notificationsMenu.addEventListener('click', (e) => e.stopPropagation());
     }
 
-    function showSnoozeMenu(camera, anchorEl) {
-        if (!snoozeMenu) createSnoozeMenu();
+    async function showNotificationsMenu(camera, anchorEl, camData) {
+        if (!notificationsMenu) createNotificationsMenu();
         // Position menu near anchor
         const rect = anchorEl.getBoundingClientRect();
-        snoozeMenu.style.top = `${rect.bottom + window.scrollY + 6}px`;
-        snoozeMenu.style.left = `${rect.left + window.scrollX}px`;
-        snoozeMenu.style.display = 'block';
+        notificationsMenu.style.top = `${rect.bottom + window.scrollY + 6}px`;
+        notificationsMenu.style.left = `${rect.left + window.scrollX}px`;
+        notificationsMenu.style.display = 'block';
 
-        // Wire buttons
-        snoozeMenu.querySelectorAll('.pop-snooze').forEach(b => {
+        const chatIdOverrides = camData?.chat_id || {};
+        const defaultChatId = await getDefaultChatId();
+
+        // Wire chat ID inputs
+        notificationsMenu.querySelectorAll('.chat-id-input').forEach(input => {
+            const mediaType = input.dataset.media;
+            input.value = chatIdOverrides[mediaType] || '';
+            input.placeholder = defaultChatId ? `Default: ${defaultChatId}` : 'Chat ID';
+        });
+        notificationsMenu.querySelectorAll('.pop-save-chat').forEach(b => {
+            b.onclick = async () => {
+                const input = notificationsMenu.querySelector(`.chat-id-input[data-media="${b.dataset.media}"]`);
+                await sendNotifyChat(camera, input.value.trim(), b.dataset.media);
+                hideNotificationsMenu();
+            };
+        });
+
+        // Wire snooze buttons
+        notificationsMenu.querySelectorAll('.pop-snooze').forEach(b => {
             b.onclick = async () => {
                 const minutes = b.dataset.minutes === 'forever' ? 'forever' : parseInt(b.dataset.minutes, 10);
                 await sendSnooze(camera, minutes, b.dataset.media);
-                hideSnoozeMenu();
+                hideNotificationsMenu();
             };
         });
-        snoozeMenu.querySelectorAll('.pop-cancel').forEach(b => {
+        notificationsMenu.querySelectorAll('.pop-cancel').forEach(b => {
             b.onclick = async () => {
                 await sendSnooze(camera, 0, b.dataset.media);
-                hideSnoozeMenu();
+                hideNotificationsMenu();
             };
         });
     }
 
-    function hideSnoozeMenu() {
-        if (snoozeMenu) snoozeMenu.style.display = 'none';
+    function hideNotificationsMenu() {
+        if (notificationsMenu) notificationsMenu.style.display = 'none';
+    }
+
+    // Send chat-ID-override API call for a specific camera ('all' for global) and media type
+    // ('picture' or 'video'). An empty chatId clears the override.
+    async function sendNotifyChat(camera, chatId, mediaType) {
+        try {
+            const response = await fetch('/api/notify-chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_id: chatId, camera, media_type: mediaType })
+            });
+            if (!response.ok) throw new Error('notify-chat failed');
+            const targetText = camera === 'all' ? 'All cameras' : `Camera "${camera}"`;
+            if (chatId) showToast(`${targetText} (${mediaType}s) will notify chat ${chatId}`, 'success');
+            else showToast(`${targetText} (${mediaType}s) chat override cleared`, 'success');
+            fetchStatus();
+        } catch (err) {
+            showToast('Failed to save chat ID', 'error');
+        }
     }
 
     // Send snooze API call for a specific camera ('all' for global) and media type
@@ -553,7 +614,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Hide menu when clicking outside
-    document.addEventListener('click', () => hideSnoozeMenu());
+    document.addEventListener('click', () => hideNotificationsMenu());
 
     function setSelectedDetection(entry, pinned = false) {
         if (pinned) {
@@ -839,10 +900,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (cameraSummaryMatches) cameraSummaryMatches.textContent = totalMatches;
             if (cameraSummaryAlerts) cameraSummaryAlerts.textContent = totalAlerts;
 
-            // Global snooze status (footer row)
-            if (globalSnoozeBtn && data.global) {
-                globalSnoozeBtn.textContent = formatSnoozeCellLabel(data.global.snooze);
-                globalSnoozeBtn.style.color = isSnoozeActive(data.global.snooze) ? 'var(--warning)' : 'var(--success)';
+            // Global notifications status (footer row)
+            if (globalNotificationsBtn && data.global) {
+                globalNotificationsBtn.textContent = formatSnoozeCellLabel(data.global.snooze);
+                globalNotificationsBtn.style.color = isSnoozeActive(data.global.snooze) ? 'var(--warning)' : 'var(--success)';
             }
 
             // Cameras Stats & Dropdown Select Option Updates
@@ -928,9 +989,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    if (globalSnoozeBtn) {
-        globalSnoozeBtn.addEventListener('click', (e) => {
-            showSnoozeMenu('all', globalSnoozeBtn);
+    if (globalNotificationsBtn) {
+        globalNotificationsBtn.addEventListener('click', (e) => {
+            showNotificationsMenu('all', globalNotificationsBtn, currentStatusData?.global);
             e.stopPropagation();
         });
     }
