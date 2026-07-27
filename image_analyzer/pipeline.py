@@ -23,11 +23,16 @@ from .stats import (
 )
 
 
-def handle_video(config, video_path, device_name="DVR", channel_name="Camera", chat_id=None):
+def handle_video(config, video_path, device_name="DVR", channel_name="Camera", chat_id=None, force_chat_id=False, silent=False):
     """Relays a video clip (e.g. an mp4 motion-alert attachment) straight to Telegram.
 
     YOLO/DeepFace/Gemini only operate on still images, so videos skip the analysis
     pipeline entirely and are just forwarded as a notification when a chat ID is configured.
+
+    `force_chat_id` makes `chat_id` win outright instead of being just the lowest-priority
+    fallback in resolve_notify_chat_id -- used by the /analyze-image HTTP endpoint, where an
+    explicit per-request chat ID should override any configured camera/global chat_id.
+    `silent` unconditionally suppresses the Telegram notification (analysis/history still run).
     """
     maybe_prune_old_images(config)
     print(f"Received video: {video_path}", file=sys.stderr)
@@ -43,10 +48,12 @@ def handle_video(config, video_path, device_name="DVR", channel_name="Camera", c
     caption = f"*Video* en *{location_context}*"
 
     cam_stats = get_camera_stats(camera_id)
-    effective_chat_id = resolve_notify_chat_id(camera_id, "video", chat_id, config)
+    effective_chat_id = chat_id if force_chat_id else resolve_notify_chat_id(camera_id, "video", chat_id, config)
 
     notified = False
-    if is_snoozed(camera_id, "video"):
+    if silent:
+        print(f"Video notification explicitly silenced for camera {camera_id}.", file=sys.stderr)
+    elif is_snoozed(camera_id, "video"):
         print(f"Video notifications are currently snoozed for camera {camera_id}. Bypassing Telegram notification.", file=sys.stderr)
     elif effective_chat_id:
         notified = send_telegram_video(config, video_path, caption, effective_chat_id)
@@ -60,10 +67,15 @@ def handle_video(config, video_path, device_name="DVR", channel_name="Camera", c
     return {"video": True, "notified": notified}
 
 
-def analyze_image(config, model, TARGET_CLASSES, img_path, device_name="DVR", channel_name="Camera", chat_id=None):
+def analyze_image(config, model, TARGET_CLASSES, img_path, device_name="DVR", channel_name="Camera", chat_id=None, force_chat_id=False, silent=False):
     """Executes local AI pipeline on a downloaded image and returns match results.
 
     This is the single sink every image source (IMAP, HTTP upload, ...) converges on.
+
+    `force_chat_id` makes `chat_id` win outright instead of being just the lowest-priority
+    fallback in resolve_notify_chat_id -- used by the /analyze-image HTTP endpoint, where an
+    explicit per-request chat ID should override any configured camera/global chat_id.
+    `silent` unconditionally suppresses the Telegram notification (analysis/history still run).
     """
     maybe_prune_old_images(config)
     print(f"Analyzing image: {img_path}", file=sys.stderr)
@@ -155,10 +167,12 @@ def analyze_image(config, model, TARGET_CLASSES, img_path, device_name="DVR", ch
     # Determine snooze/notification outcome before persisting the entry, so the sidecar
     # and in-memory history record whether an alert actually went out.
     snoozed = is_snoozed(camera_id, "picture")
-    effective_chat_id = resolve_notify_chat_id(camera_id, "picture", chat_id, config)
+    effective_chat_id = chat_id if force_chat_id else resolve_notify_chat_id(camera_id, "picture", chat_id, config)
 
     notified = False
-    if snoozed:
+    if silent:
+        print(f"Notification explicitly silenced for camera {camera_id}.", file=sys.stderr)
+    elif snoozed:
         print(f"Notifications are currently snoozed for camera {camera_id}. Bypassing Telegram notification.", file=sys.stderr)
     elif effective_chat_id and is_match:
         notified = send_telegram_alert(config, img_path, caption, effective_chat_id)

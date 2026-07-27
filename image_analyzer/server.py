@@ -219,6 +219,7 @@ class UploadHandler(BaseHTTPRequestHandler):
                 device_name = ""
                 channel_name = ""
                 notify_chat = None
+                silent = False
                 filename = "uploaded_image.jpg"
 
                 for part in msg.walk():
@@ -241,6 +242,9 @@ class UploadHandler(BaseHTTPRequestHandler):
                         channel_name = part.get_payload(decode=True).decode('utf-8', errors='replace').strip()
                     elif name == 'notify-chat':
                         notify_chat = part.get_payload(decode=True).decode('utf-8', errors='replace').strip()
+                    elif name == 'silent':
+                        silent_raw = part.get_payload(decode=True).decode('utf-8', errors='replace').strip().lower()
+                        silent = silent_raw in ('1', 'true', 'yes', 'on')
 
                 if not image_data:
                     self.send_response(400)
@@ -265,13 +269,13 @@ class UploadHandler(BaseHTTPRequestHandler):
                     result = handle_video(
                         self.config, filepath,
                         device_name=device_name or "DVR", channel_name=channel_name or "Camera",
-                        chat_id=notify_chat
+                        chat_id=notify_chat, force_chat_id=bool(notify_chat), silent=silent
                     )
                 else:
                     result = analyze_image(
                         self.config, self.model, self.target_classes, filepath,
                         device_name=device_name or "DVR", channel_name=channel_name or "Camera",
-                        chat_id=notify_chat
+                        chat_id=notify_chat, force_chat_id=bool(notify_chat), silent=silent
                     )
 
                 self.send_json(result)
