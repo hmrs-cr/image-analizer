@@ -177,7 +177,7 @@ body {
     }
 
     #dashboard-col-left {
-        flex: 0 0 calc(33.333% - 6px);
+        flex: 0 0 calc(45% - 6px);
         min-width: 250px;
     }
 
