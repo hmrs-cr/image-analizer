@@ -397,14 +397,23 @@ document.addEventListener('DOMContentLoaded', () => {
         return 'Active';
     }
 
-    function isSnoozeActive(snooze) {
-        if (!snooze) return false;
-        return ['picture', 'video'].some(t => snooze[t] && (snooze[t].forever || snooze[t].remaining > 0));
+    function isMediaSnoozeActive(status) {
+        return !!(status && (status.forever || status.remaining > 0));
     }
 
-    function formatSnoozeCellLabel(snooze) {
-        if (!snooze) return 'Active';
-        return `📷 ${formatMediaSnooze(snooze.picture)} · 🎥 ${formatMediaSnooze(snooze.video)}`;
+    // Icon-only rendering for the notifications cell buttons (global/device/camera): each media
+    // type gets its own colored icon instead of repeating the word "Active" per type, which used
+    // to make the cells (e.g. "📷 Active · 🎥 Active") take up far more space than needed.
+    function formatNotificationsCellHtml(snooze) {
+        const pictureSnoozed = isMediaSnoozeActive(snooze?.picture);
+        const videoSnoozed = isMediaSnoozeActive(snooze?.video);
+        const pictureStyle = pictureSnoozed ? 'color:var(--text-muted);opacity:0.55;' : 'color:var(--success);opacity:1;';
+        const videoStyle = videoSnoozed ? 'color:var(--text-muted);opacity:0.55;' : 'color:var(--success);opacity:1;';
+        return `<span style="${pictureStyle}">📷</span><span style="${videoStyle}">🎥</span>`;
+    }
+
+    function formatNotificationsCellTitle(snooze) {
+        return `Pictures: ${formatMediaSnooze(snooze?.picture)} · Video: ${formatMediaSnooze(snooze?.video)}`;
     }
 
     function updateCamerasStatsTable(cameras, devices) {
@@ -431,8 +440,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const totalMatches = groupedCameras.reduce((sum, cam) => sum + (cam.matches_found || 0), 0);
                 const totalAlerts = groupedCameras.reduce((sum, cam) => sum + (cam.notifications_sent || 0), 0);
                 const deviceData = (devices || {})[entry.home];
-                const deviceSnoozeText = formatSnoozeCellLabel(deviceData?.snooze);
-                const deviceSnoozeColor = isSnoozeActive(deviceData?.snooze) ? 'var(--warning)' : 'var(--success)';
+                const deviceSnoozeHtml = formatNotificationsCellHtml(deviceData?.snooze);
+                const deviceSnoozeTitle = formatNotificationsCellTitle(deviceData?.snooze);
                 html += `
                     <tr class="camera-group-row">
                         <td colspan="5" style="padding: 8px 0 6px 4px; font-size: 0.78rem; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em;">
@@ -443,7 +452,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 </button>
                                 <span class="camera-group-summary" style="display:flex; align-items:center; gap:10px;">
                                     ${groupedCameras.length} cams • ${totalAnalyzed} analyzed • ${totalMatches} matches • ${totalAlerts} alerts
-                                    <button class="notifications-cell-btn device-notifications-btn" data-device="${entry.home}" style="background:none;border:none;color:${deviceSnoozeColor};font-weight:500;cursor:pointer;text-transform:none;letter-spacing:normal;">${deviceSnoozeText}</button>
+                                    <button class="notifications-cell-btn device-notifications-btn" data-device="${entry.home}" title="${deviceSnoozeTitle}" aria-label="${deviceSnoozeTitle}" style="background:none;border:none;font-size:1rem;line-height:1;cursor:pointer;text-transform:none;letter-spacing:normal;">${deviceSnoozeHtml}</button>
                                 </span>
                             </div>
                         </td>
@@ -458,8 +467,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const name = entry.name;
             const cam = cameras[name];
-            const snoozeText = formatSnoozeCellLabel(cam.snooze);
-            const snoozeColor = isSnoozeActive(cam.snooze) ? 'var(--warning)' : 'var(--success)';
+            const snoozeHtml = formatNotificationsCellHtml(cam.snooze);
+            const snoozeTitle = formatNotificationsCellTitle(cam.snooze);
 
             html += `
                 <tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.03);">
@@ -468,7 +477,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td style="padding: 8px 0; text-align: center; color: var(--accent);">${cam.matches_found}</td>
                     <td style="padding: 8px 0; text-align: center; color: var(--primary);">${cam.notifications_sent}</td>
                     <td style="padding: 8px 0; text-align: right;">
-                        <button class="notifications-cell-btn" data-camera="${name}" style="background:none;border:none;color:${snoozeColor};font-weight:500;cursor:pointer;">${snoozeText}</button>
+                        <button class="notifications-cell-btn" data-camera="${name}" title="${snoozeTitle}" aria-label="${snoozeTitle}" style="background:none;border:none;font-size:1.05rem;line-height:1;cursor:pointer;">${snoozeHtml}</button>
                     </td>
                 </tr>
             `;
@@ -1122,8 +1131,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Global notifications status (footer row)
             if (globalNotificationsBtn && data.global) {
-                globalNotificationsBtn.textContent = formatSnoozeCellLabel(data.global.snooze);
-                globalNotificationsBtn.style.color = isSnoozeActive(data.global.snooze) ? 'var(--warning)' : 'var(--success)';
+                globalNotificationsBtn.innerHTML = formatNotificationsCellHtml(data.global.snooze);
+                const globalTitle = formatNotificationsCellTitle(data.global.snooze);
+                globalNotificationsBtn.title = globalTitle;
+                globalNotificationsBtn.setAttribute('aria-label', globalTitle);
             }
 
             // Cameras Stats & Dropdown Select Option Updates
