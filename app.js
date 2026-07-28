@@ -407,9 +407,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function formatNotificationsCellHtml(snooze) {
         const pictureSnoozed = isMediaSnoozeActive(snooze?.picture);
         const videoSnoozed = isMediaSnoozeActive(snooze?.video);
-        const pictureStyle = pictureSnoozed ? 'color:var(--text-muted);opacity:0.55;' : 'color:var(--success);opacity:1;';
-        const videoStyle = videoSnoozed ? 'color:var(--text-muted);opacity:0.55;' : 'color:var(--success);opacity:1;';
-        return `<span style="${pictureStyle}">📷</span><span style="${videoStyle}">🎥</span>`;
+        const pictureStyle = pictureSnoozed ? 'color:var(--text-muted);opacity:0.3;' : 'color:var(--success);opacity:1;';
+        const videoStyle = videoSnoozed ? 'color:var(--text-muted);opacity:0.3;' : 'color:var(--success);opacity:1;';
+        return `<span style="${pictureStyle}margin-right:2px;">📷</span><span style="${videoStyle}">🎥</span>`;
     }
 
     function formatNotificationsCellTitle(snooze) {
@@ -662,13 +662,18 @@ document.addEventListener('DOMContentLoaded', () => {
             };
         });
 
-        // Wire snooze buttons
+        // Wire snooze buttons, highlighting whichever duration is currently active per media type
         notificationsMenu.querySelectorAll('.pop-snooze').forEach(b => {
             b.onclick = async () => {
                 const minutes = b.dataset.minutes === 'forever' ? 'forever' : parseInt(b.dataset.minutes, 10);
                 await sendSnooze(scope, minutes, b.dataset.media);
                 hideNotificationsMenu();
             };
+            const mediaSnooze = scopeData?.snooze?.[b.dataset.media];
+            const isSelected = b.dataset.minutes === 'forever'
+                ? !!mediaSnooze?.forever
+                : !mediaSnooze?.forever && mediaSnooze?.remaining > 0 && Math.ceil(mediaSnooze.remaining / 60) === parseInt(b.dataset.minutes, 10);
+            b.classList.toggle('btn-toggle-active', isSelected);
         });
         notificationsMenu.querySelectorAll('.pop-cancel').forEach(b => {
             b.onclick = async () => {
