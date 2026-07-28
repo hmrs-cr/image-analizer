@@ -18,6 +18,7 @@ from .stats import (
     save_notification_settings,
     set_notify_chat_id,
     set_snooze,
+    set_target_classes,
     snooze_status,
     stats,
     stats_lock,
@@ -32,7 +33,6 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 class UploadHandler(BaseHTTPRequestHandler):
     config = None
     model = None
-    target_classes = None
 
     def check_basic_auth(self):
         """Validates the Authorization header against the configured basic-auth credentials.
@@ -97,14 +97,16 @@ class UploadHandler(BaseHTTPRequestHandler):
                         "matches_found": cam_stat["matches_found"],
                         "notifications_sent": cam_stat["notifications_sent"],
                         "snooze": snooze_status(cam_stat["snooze"]),
-                        "chat_id": dict(cam_stat["chat_id"])
+                        "chat_id": dict(cam_stat["chat_id"]),
+                        "classes": cam_stat["classes"]
                     }
 
                 devices_data = {}
                 for name, dev_stat in stats["devices"].items():
                     devices_data[name] = {
                         "snooze": snooze_status(dev_stat["snooze"]),
-                        "chat_id": dict(dev_stat["chat_id"])
+                        "chat_id": dict(dev_stat["chat_id"]),
+                        "classes": dev_stat["classes"]
                     }
 
                 data = {
@@ -114,7 +116,8 @@ class UploadHandler(BaseHTTPRequestHandler):
                         "matches_found": stats["global"]["matches_found"],
                         "notifications_sent": stats["global"]["notifications_sent"],
                         "snooze": snooze_status(stats["global"]["snooze"]),
-                        "chat_id": dict(stats["global"]["chat_id"])
+                        "chat_id": dict(stats["global"]["chat_id"]),
+                        "classes": stats["global"]["classes"]
                     },
                     "cameras": cameras_data,
                     "devices": devices_data,
@@ -123,6 +126,9 @@ class UploadHandler(BaseHTTPRequestHandler):
             self.send_json(data)
         elif path == "/api/settings":
             self.send_json(mask_settings(self.config))
+        elif path == "/api/classes":
+            available = sorted(self.model.names.values()) if self.model else []
+            self.send_json({"available": available, "default": self.config.classes})
         elif path.startswith("/api/last-image"):
             with stats_lock:
                 image_path = stats["last_image_path"]
@@ -281,7 +287,7 @@ class UploadHandler(BaseHTTPRequestHandler):
                     )
                 else:
                     result = analyze_image(
-                        self.config, self.model, self.target_classes, filepath,
+                        self.config, self.model, filepath,
                         device_name=device_name or "DVR", channel_name=channel_name or "Camera",
                         chat_id=notify_chat, force_chat_id=bool(notify_chat), silent=silent
                     )
@@ -349,6 +355,24 @@ class UploadHandler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(f'{{"error": "{str(e)}"}}'.encode('utf-8'))
 
+        elif self.path == "/api/target-classes":
+            try:
+                content_length = int(self.headers.get('Content-Length', 0))
+                body = self.rfile.read(content_length).decode('utf-8')
+                data = json.loads(body)
+                camera = data.get("camera", "all")
+                device = data.get("device", "")
+                classes_value = (data.get("classes") or "").strip()
+
+                set_target_classes(camera, classes_value, device=device)
+                save_notification_settings(self.config)
+
+                self.send_json({"status": "success", "camera": camera, "device": device, "classes": classes_value})
+            except Exception as e:
+                self.send_response(500)
+                self.end_headers()
+                self.wfile.write(f'{{"error": "{str(e)}"}}'.encode('utf-8'))
+
         elif self.path == "/api/trigger-analysis":
             try:
                 with stats_lock:
@@ -362,7 +386,7 @@ class UploadHandler(BaseHTTPRequestHandler):
                     return
 
                 res = analyze_image(
-                    self.config, self.model, self.target_classes, last_image_path,
+                    self.config, self.model, last_image_path,
                     device_name=last_dev, channel_name=last_chan, chat_id=self.config.telegram_chat_id
                 )
                 self.send_json(res)

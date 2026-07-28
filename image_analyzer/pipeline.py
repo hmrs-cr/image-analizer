@@ -17,10 +17,19 @@ from .stats import (
     is_snoozed,
     maybe_prune_old_images,
     resolve_notify_chat_id,
+    resolve_target_classes,
     save_detection_sidecar,
     stats,
     stats_lock,
 )
+
+
+def _class_names_to_ids(model, classes_csv):
+    """Converts a comma-separated class-name string (e.g. config.classes or a
+    resolve_target_classes override) into the set of YOLO class IDs recognized by `model`,
+    dropping any names the model doesn't know about."""
+    name_to_id = {name.lower(): cid for cid, name in model.names.items()}
+    return {name_to_id[n.strip().lower()] for n in classes_csv.split(",") if n.strip() and n.strip().lower() in name_to_id}
 
 
 def handle_video(config, video_path, device_name="DVR", channel_name="Camera", chat_id=None, force_chat_id=False, silent=False):
@@ -67,7 +76,7 @@ def handle_video(config, video_path, device_name="DVR", channel_name="Camera", c
     return {"video": True, "notified": notified}
 
 
-def analyze_image(config, model, TARGET_CLASSES, img_path, device_name="DVR", channel_name="Camera", chat_id=None, force_chat_id=False, silent=False):
+def analyze_image(config, model, img_path, device_name="DVR", channel_name="Camera", chat_id=None, force_chat_id=False, silent=False):
     """Executes local AI pipeline on a downloaded image and returns match results.
 
     This is the single sink every image source (IMAP, HTTP upload, ...) converges on.
@@ -95,6 +104,9 @@ def analyze_image(config, model, TARGET_CLASSES, img_path, device_name="DVR", ch
     with stats_lock:
         stats["global"]["pictures_analyzed"] += 1
         cam_stats["pictures_analyzed"] += 1
+
+    classes_csv = resolve_target_classes(camera_id, device_name, config)
+    TARGET_CLASSES = _class_names_to_ids(model, classes_csv)
 
     results = model(img_path, verbose=False)
 

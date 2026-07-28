@@ -211,6 +211,26 @@ document.addEventListener('DOMContentLoaded', () => {
         return { picture: '', video: '' };
     }
 
+    function getMockClassesData() {
+        return {
+            available: [
+                'airplane', 'apple', 'backpack', 'banana', 'baseball bat', 'baseball glove',
+                'bear', 'bed', 'bench', 'bicycle', 'bird', 'boat', 'book', 'bottle', 'bowl',
+                'broccoli', 'bus', 'cake', 'car', 'carrot', 'cat', 'cell phone', 'chair',
+                'clock', 'couch', 'cow', 'cup', 'dining table', 'dog', 'donut', 'elephant',
+                'fire hydrant', 'fork', 'frisbee', 'giraffe', 'hair drier', 'handbag',
+                'horse', 'hot dog', 'keyboard', 'kite', 'knife', 'laptop', 'microwave',
+                'motorcycle', 'mouse', 'orange', 'oven', 'parking meter', 'person',
+                'pizza', 'potted plant', 'refrigerator', 'remote', 'sandwich', 'scissors',
+                'sheep', 'sink', 'skateboard', 'skis', 'snowboard', 'spoon', 'sports ball',
+                'stop sign', 'suitcase', 'surfboard', 'teddy bear', 'tennis racket', 'tie',
+                'toaster', 'toilet', 'toothbrush', 'traffic light', 'train', 'truck', 'tv',
+                'umbrella', 'vase', 'wine glass', 'zebra'
+            ],
+            default: 'person,bicycle,car,motorcycle,bus,truck,bird,cat,dog,horse,sheep,cow'
+        };
+    }
+
     function getMockStatusData() {
         return {
             uptime: 13200,
@@ -219,23 +239,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 matches_found: 19,
                 notifications_sent: 11,
                 snooze: getMockSnooze(),
-                chat_id: getMockChatId()
+                chat_id: getMockChatId(), classes: ''
             },
             cameras: {
-                'Galeron - Front Door': { pictures_analyzed: 18, matches_found: 9, notifications_sent: 5, snooze: getMockSnooze(), chat_id: getMockChatId() },
-                'Galeron - Back Yard': { pictures_analyzed: 14, matches_found: 6, notifications_sent: 3, snooze: getMockSnooze(), chat_id: getMockChatId() },
-                'Galeron - Garage': { pictures_analyzed: 10, matches_found: 4, notifications_sent: 3, snooze: getMockSnooze(), chat_id: getMockChatId() },
-                'Casa - Front Door': { pictures_analyzed: 18, matches_found: 9, notifications_sent: 5, snooze: getMockSnooze(), chat_id: getMockChatId() },
-                'Casa - Back Yard': { pictures_analyzed: 14, matches_found: 6, notifications_sent: 3, snooze: getMockSnooze(), chat_id: getMockChatId() },
-                'Casa - Garage': { pictures_analyzed: 10, matches_found: 4, notifications_sent: 3, snooze: getMockSnooze(), chat_id: getMockChatId() },
-                'Otra - Front Door': { pictures_analyzed: 18, matches_found: 9, notifications_sent: 5, snooze: getMockSnooze(), chat_id: getMockChatId() },
-                'Otra - Back Yard': { pictures_analyzed: 14, matches_found: 6, notifications_sent: 3, snooze: getMockSnooze(), chat_id: getMockChatId() },
-                'Otra - Garage': { pictures_analyzed: 10, matches_found: 4, notifications_sent: 3, snooze: getMockSnooze(), chat_id: getMockChatId() }
+                'Galeron - Front Door': { pictures_analyzed: 18, matches_found: 9, notifications_sent: 5, snooze: getMockSnooze(), chat_id: getMockChatId(), classes: '' },
+                'Galeron - Back Yard': { pictures_analyzed: 14, matches_found: 6, notifications_sent: 3, snooze: getMockSnooze(), chat_id: getMockChatId(), classes: '' },
+                'Galeron - Garage': { pictures_analyzed: 10, matches_found: 4, notifications_sent: 3, snooze: getMockSnooze(), chat_id: getMockChatId(), classes: '' },
+                'Casa - Front Door': { pictures_analyzed: 18, matches_found: 9, notifications_sent: 5, snooze: getMockSnooze(), chat_id: getMockChatId(), classes: '' },
+                'Casa - Back Yard': { pictures_analyzed: 14, matches_found: 6, notifications_sent: 3, snooze: getMockSnooze(), chat_id: getMockChatId(), classes: '' },
+                'Casa - Garage': { pictures_analyzed: 10, matches_found: 4, notifications_sent: 3, snooze: getMockSnooze(), chat_id: getMockChatId(), classes: '' },
+                'Otra - Front Door': { pictures_analyzed: 18, matches_found: 9, notifications_sent: 5, snooze: getMockSnooze(), chat_id: getMockChatId(), classes: '' },
+                'Otra - Back Yard': { pictures_analyzed: 14, matches_found: 6, notifications_sent: 3, snooze: getMockSnooze(), chat_id: getMockChatId(), classes: '' },
+                'Otra - Garage': { pictures_analyzed: 10, matches_found: 4, notifications_sent: 3, snooze: getMockSnooze(), chat_id: getMockChatId(), classes: '' }
             },
             devices: {
-                Galeron: { snooze: getMockSnooze(), chat_id: getMockChatId() },
-                Casa: { snooze: getMockSnooze(), chat_id: getMockChatId() },
-                Otra: { snooze: getMockSnooze(), chat_id: getMockChatId() }
+                Galeron: { snooze: getMockSnooze(), chat_id: getMockChatId(), classes: '' },
+                Casa: { snooze: getMockSnooze(), chat_id: getMockChatId(), classes: '' },
+                Otra: { snooze: getMockSnooze(), chat_id: getMockChatId(), classes: '' }
             },
             last_detection: {
                 timestamp: Math.floor(Date.now() / 1000) - 30,
@@ -505,6 +525,20 @@ document.addEventListener('DOMContentLoaded', () => {
         return cachedDefaultChatId;
     }
 
+    // Cached so every popover open doesn't re-fetch it; the model's class list is fixed
+    // for the lifetime of the process.
+    let cachedClassesInfo = null;
+    async function getAvailableClasses() {
+        if (cachedClassesInfo) return cachedClassesInfo;
+        try {
+            const data = useMockData ? getMockClassesData() : await (await fetch('/api/classes')).json();
+            cachedClassesInfo = { available: data.available || [], default: data.default || '' };
+        } catch (err) {
+            cachedClassesInfo = { available: [], default: '' };
+        }
+        return cachedClassesInfo;
+    }
+
     // In-place notifications menu (reused): per media type, lets you snooze and/or
     // redirect notifications to a specific Telegram chat ID for this camera ('all' for global).
     let notificationsMenu = null;
@@ -538,6 +572,15 @@ document.addEventListener('DOMContentLoaded', () => {
                         </div>
                     </div>
                 `).join('')}
+                <div>
+                    <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:4px;">🏷️ Detected Classes (pictures)</div>
+                    <div class="classes-checklist" style="max-height:130px; overflow-y:auto; border:1px solid var(--card-border); border-radius:4px; padding:6px; display:flex; flex-wrap:wrap; gap:4px 10px; margin-bottom:4px;"></div>
+                    <div class="classes-default-hint" style="font-size:0.7rem; color:var(--text-muted); margin-bottom:6px;"></div>
+                    <div style="display:flex; gap:6px;">
+                        <button class="btn btn-secondary pop-save-classes">Save</button>
+                        <button class="btn btn-outline pop-clear-classes">Use Default</button>
+                    </div>
+                </div>
             </div>
         `;
         document.body.appendChild(notificationsMenu);
@@ -585,6 +628,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 hideNotificationsMenu();
             };
         });
+
+        // Wire the detected-classes checklist
+        const classesInfo = await getAvailableClasses();
+        const currentClasses = (scopeData?.classes || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+        const checklistEl = notificationsMenu.querySelector('.classes-checklist');
+        checklistEl.innerHTML = classesInfo.available.map(name => `
+            <label style="display:flex; align-items:center; gap:4px; font-size:0.78rem; white-space:nowrap;">
+                <input type="checkbox" class="class-checkbox" value="${name}" ${currentClasses.includes(name.toLowerCase()) ? 'checked' : ''}>
+                ${name}
+            </label>
+        `).join('');
+        const hintEl = notificationsMenu.querySelector('.classes-default-hint');
+        hintEl.textContent = classesInfo.default ? `Default: ${classesInfo.default}` : '';
+
+        notificationsMenu.querySelector('.pop-save-classes').onclick = async () => {
+            const checked = Array.from(notificationsMenu.querySelectorAll('.class-checkbox:checked')).map(cb => cb.value);
+            await sendTargetClasses(scope, checked.join(','));
+            hideNotificationsMenu();
+        };
+        notificationsMenu.querySelector('.pop-clear-classes').onclick = async () => {
+            await sendTargetClasses(scope, '');
+            hideNotificationsMenu();
+        };
     }
 
     function hideNotificationsMenu() {
@@ -636,6 +702,26 @@ document.addEventListener('DOMContentLoaded', () => {
             fetchStatus();
         } catch (err) {
             showToast('Failed to apply snooze', 'error');
+        }
+    }
+
+    // Send target-classes-override API call for the given scope (camera, device, or
+    // global). An empty classesCsv clears the override, falling back to device/global/
+    // --classes in that order.
+    async function sendTargetClasses(scope, classesCsv) {
+        const { camera, device, label } = describeScope(scope);
+        try {
+            const response = await fetch('/api/target-classes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ classes: classesCsv, camera, device })
+            });
+            if (!response.ok) throw new Error('target-classes failed');
+            if (classesCsv) showToast(`${label} will detect: ${classesCsv}`, 'success');
+            else showToast(`${label} detected classes reset to default`, 'success');
+            fetchStatus();
+        } catch (err) {
+            showToast('Failed to save detected classes', 'error');
         }
     }
 

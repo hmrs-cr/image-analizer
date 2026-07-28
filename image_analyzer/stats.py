@@ -40,7 +40,8 @@ stats = {
         "matches_found": 0,
         "notifications_sent": 0,
         "snooze": _new_snooze_state(),
-        "chat_id": _new_chat_id_overrides()
+        "chat_id": _new_chat_id_overrides(),
+        "classes": ""
     },
     "cameras": {},
     "devices": {},
@@ -68,7 +69,8 @@ def get_camera_stats(camera_id):
                 "matches_found": 0,
                 "notifications_sent": 0,
                 "snooze": _new_snooze_state(),
-                "chat_id": _new_chat_id_overrides()
+                "chat_id": _new_chat_id_overrides(),
+                "classes": ""
             }
         return stats["cameras"][camera_id]
 
@@ -78,7 +80,8 @@ def get_device_stats(device_name):
         if device_name not in stats["devices"]:
             stats["devices"][device_name] = {
                 "snooze": _new_snooze_state(),
-                "chat_id": _new_chat_id_overrides()
+                "chat_id": _new_chat_id_overrides(),
+                "classes": ""
             }
         return stats["devices"][device_name]
 
@@ -165,27 +168,52 @@ def resolve_notify_chat_id(camera_id, device_name, media_type, fallback_chat_id,
     return cam_override or device_override or global_override or fallback_chat_id or config.telegram_chat_id
 
 
+def set_target_classes(camera, classes_value, device=""):
+    """Sets the YOLO target-classes override (a comma-separated class-name string) for
+    `device` (device-level), else `camera` ('all' for the global setting). An empty string
+    clears the override, falling back to resolve_target_classes's lower-priority sources."""
+    with stats_lock:
+        scoped = _resolve_scope_stats(camera, device)
+        if scoped is not None:
+            scoped["classes"] = classes_value
+        else:
+            stats["global"]["classes"] = classes_value
+        return classes_value
+
+
+def resolve_target_classes(camera_id, device_name, config):
+    """Resolves the comma-separated YOLO class-name string to detect against, in priority
+    order: a per-camera override, then a per-device override, then a global override, then
+    finally the configured --classes/TARGET_CLASSES default."""
+    with stats_lock:
+        cam_override = get_camera_stats(camera_id)["classes"]
+        device_override = get_device_stats(device_name)["classes"]
+        global_override = stats["global"]["classes"]
+    return cam_override or device_override or global_override or config.classes
+
+
 def notification_settings_path(config):
     return os.path.join(config.download_folder, NOTIFICATION_SETTINGS_FILENAME)
 
 
 def save_notification_settings(config):
-    """Persists global + per-camera snooze and chat-ID-override settings so they survive
-    a restart."""
+    """Persists global + per-camera/device snooze, chat-ID-override, and target-classes
+    settings so they survive a restart."""
     if not config.download_folder:
         return
     with stats_lock:
         state = {
             "global": {
                 "snooze": dict(stats["global"]["snooze"]),
-                "chat_id": dict(stats["global"]["chat_id"])
+                "chat_id": dict(stats["global"]["chat_id"]),
+                "classes": stats["global"]["classes"]
             },
             "cameras": {
-                cam_id: {"snooze": dict(cam["snooze"]), "chat_id": dict(cam["chat_id"])}
+                cam_id: {"snooze": dict(cam["snooze"]), "chat_id": dict(cam["chat_id"]), "classes": cam["classes"]}
                 for cam_id, cam in stats["cameras"].items()
             },
             "devices": {
-                device_name: {"snooze": dict(dev["snooze"]), "chat_id": dict(dev["chat_id"])}
+                device_name: {"snooze": dict(dev["snooze"]), "chat_id": dict(dev["chat_id"]), "classes": dev["classes"]}
                 for device_name, dev in stats["devices"].items()
             }
         }
@@ -224,6 +252,8 @@ def load_notification_settings(config):
                 stats["global"]["snooze"][t] = global_state["snooze"][t]
             if t in global_state.get("chat_id", {}):
                 stats["global"]["chat_id"][t] = global_state["chat_id"][t]
+        if "classes" in global_state:
+            stats["global"]["classes"] = global_state["classes"]
 
         for camera_id, cam_state in state.get("cameras", {}).items():
             cam = get_camera_stats(camera_id)
@@ -232,6 +262,8 @@ def load_notification_settings(config):
                     cam["snooze"][t] = cam_state["snooze"][t]
                 if t in cam_state.get("chat_id", {}):
                     cam["chat_id"][t] = cam_state["chat_id"][t]
+            if "classes" in cam_state:
+                cam["classes"] = cam_state["classes"]
 
         for device_name, dev_state in state.get("devices", {}).items():
             dev = get_device_stats(device_name)
@@ -240,6 +272,8 @@ def load_notification_settings(config):
                     dev["snooze"][t] = dev_state["snooze"][t]
                 if t in dev_state.get("chat_id", {}):
                     dev["chat_id"][t] = dev_state["chat_id"][t]
+            if "classes" in dev_state:
+                dev["classes"] = dev_state["classes"]
 
     print("Restored notification settings from disk.", file=sys.stderr)
 

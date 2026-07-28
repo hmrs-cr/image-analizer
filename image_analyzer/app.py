@@ -37,14 +37,11 @@ def main():
     print(f"Loading YOLO model ({config.model_name})...", file=sys.stderr)
     model = YOLO(config.model_name)
 
-    name_to_id = {name.lower(): cid for cid, name in model.names.items()}
-    TARGET_CLASSES = [name_to_id[n.strip().lower()] for n in config.classes.split(",") if n.strip() and n.strip().lower() in name_to_id]
-
     def on_image(filepath, device_name, channel_name, chat_id):
         if is_video_file(filepath):
             handle_video(config, filepath, device_name=device_name, channel_name=channel_name, chat_id=chat_id)
         else:
-            analyze_image(config, model, TARGET_CLASSES, filepath, device_name=device_name, channel_name=channel_name, chat_id=chat_id)
+            analyze_image(config, model, filepath, device_name=device_name, channel_name=channel_name, chat_id=chat_id)
 
     start_sources(config, on_image)
 
@@ -55,7 +52,6 @@ def main():
 
     UploadHandler.config = config
     UploadHandler.model = model
-    UploadHandler.target_classes = TARGET_CLASSES
 
     print(f"Starting HTTP API server on {config.host}:{config.port}...", file=sys.stderr)
     server = ThreadingHTTPServer((config.host, config.port), UploadHandler)
