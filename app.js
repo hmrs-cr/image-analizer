@@ -26,6 +26,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const noDetectionPlaceholder = document.getElementById('no-detection-placeholder');
     const detectionContent = document.getElementById('detection-content');
     const lastDetectionImage = document.getElementById('last-detection-image');
+    const lastDetectionMediaIcon = document.getElementById('last-detection-media-icon');
+    const lastDetectionDownload = document.getElementById('last-detection-download');
     const lastDetectionTime = document.getElementById('last-detection-time');
     const lastDetectionLocation = document.getElementById('last-detection-location');
     const lastDetectionObjects = document.getElementById('last-detection-objects');
@@ -1155,6 +1157,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Set image source (with cache buster)
                 lastDetectionImage.src = useMockData ? data.last_detection.image_path : `/api/last-image?t=${new Date().getTime()}`;
+
+                // Media type icon + download link. Videos are analyzed via a representative
+                // thumbnail frame, but the download should fetch the original clip (video_filename),
+                // not that frame -- pictures just download the analyzed image itself.
+                const isVideo = !!data.last_detection.is_video;
+                if (lastDetectionMediaIcon) {
+                    lastDetectionMediaIcon.textContent = isVideo ? '🎥' : '📷';
+                    lastDetectionMediaIcon.title = isVideo ? 'Video' : 'Picture';
+                }
+                if (lastDetectionDownload) {
+                    const downloadFilename = isVideo ? data.last_detection.video_filename : data.last_detection.image_filename;
+                    if (downloadFilename) {
+                        lastDetectionDownload.href = useMockData
+                            ? data.last_detection.image_path
+                            : `/api/image?camera=${encodeURIComponent(data.last_detection.camera_id)}&file=${encodeURIComponent(downloadFilename)}`;
+                        lastDetectionDownload.download = downloadFilename;
+                        lastDetectionDownload.style.display = '';
+                    } else {
+                        lastDetectionDownload.style.display = 'none';
+                    }
+                }
 
                 const timeStr = new Date(data.last_detection.timestamp * 1000).toLocaleString();
                 lastDetectionTime.textContent = timeStr;

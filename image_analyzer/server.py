@@ -152,7 +152,8 @@ class UploadHandler(BaseHTTPRequestHandler):
             camera_folder = get_camera_folder(self.config, unquote(camera))
             image_path = os.path.join(camera_folder, safe_filename)
             if os.path.exists(image_path):
-                self.serve_file(image_path, "image/jpeg")
+                content_type = "video/mp4" if is_video_file(image_path) else "image/jpeg"
+                self.serve_file(image_path, content_type)
             else:
                 self.send_response(404)
                 self.end_headers()

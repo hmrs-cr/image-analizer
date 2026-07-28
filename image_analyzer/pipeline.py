@@ -183,7 +183,7 @@ def _persist_detection(camera_id, device_name, channel_name, location_context, i
 
     with stats_lock:
         if is_match:
-            stats["last_detection"] = {
+            last_detection = {
                 "timestamp": entry["timestamp"],
                 "location": location_context,
                 "description": gemini_desc,
@@ -192,6 +192,9 @@ def _persist_detection(camera_id, device_name, channel_name, location_context, i
                 "image_filename": image_filename,
                 "image_path": image_path
             }
+            if extra_fields:
+                last_detection.update(extra_fields)
+            stats["last_detection"] = last_detection
             stats["last_image_path"] = image_path
             stats["last_image_camera"] = (device_name, channel_name)
 
