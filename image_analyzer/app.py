@@ -39,7 +39,7 @@ def main():
 
     def on_image(filepath, device_name, channel_name, chat_id):
         if is_video_file(filepath):
-            handle_video(config, filepath, device_name=device_name, channel_name=channel_name, chat_id=chat_id)
+            handle_video(config, model, filepath, device_name=device_name, channel_name=channel_name, chat_id=chat_id)
         else:
             analyze_image(config, model, filepath, device_name=device_name, channel_name=channel_name, chat_id=chat_id)
 

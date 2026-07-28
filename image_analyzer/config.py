@@ -29,6 +29,7 @@ def get_config():
     parser.add_argument("--facial-db", default=os.environ.get("FACIAL_DB_PATH", ""), help="Directory path for DeepFace known identities")
     parser.add_argument("--min-confidence", type=float, default=float(os.environ.get("MIN_CONFIDENCE", "0.0")), help="Minimum confidence threshold (0.0-1.0)")
     parser.add_argument("--classes", default=os.environ.get("TARGET_CLASSES", "person,bicycle,car,motorcycle,bus,truck,bird,cat,dog,horse,sheep,cow"), help="Comma-separated COCO class names to detect")
+    parser.add_argument("--video-frame-stride", type=int, default=int(os.environ.get("VIDEO_FRAME_STRIDE", "15")), help="Analyze every Nth frame of a video clip with YOLO (higher = faster, coarser sampling)")
 
     # Gemini Configuration
     parser.add_argument("--gemini-api-key", default=os.environ.get("GEMINI_API_KEY"), help="Google Gemini API Key")

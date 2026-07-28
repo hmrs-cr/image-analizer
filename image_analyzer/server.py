@@ -281,7 +281,7 @@ class UploadHandler(BaseHTTPRequestHandler):
 
                 if is_video_file(filename):
                     result = handle_video(
-                        self.config, filepath,
+                        self.config, self.model, filepath,
                         device_name=device_name or "DVR", channel_name=channel_name or "Camera",
                         chat_id=notify_chat, force_chat_id=bool(notify_chat), silent=silent
                     )
