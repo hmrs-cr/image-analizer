@@ -852,6 +852,30 @@ document.addEventListener('DOMContentLoaded', () => {
     // Hide menu when clicking outside
     document.addEventListener('click', () => hideNotificationsMenu());
 
+    // Shared by both the live "Last Detection" panel and history-item selection. Videos are
+    // analyzed via a representative thumbnail frame, but the download should fetch the original
+    // clip (video_filename), not that frame -- pictures just download the analyzed image itself.
+    function updateDetectionMediaUI(mediaInfo) {
+        const isVideo = !!mediaInfo.is_video;
+        if (lastDetectionMediaIcon) {
+            lastDetectionMediaIcon.textContent = isVideo ? '🎥' : '📷';
+            lastDetectionMediaIcon.title = isVideo ? 'Video' : 'Picture';
+        }
+        if (!lastDetectionDownload) return;
+        const filename = isVideo ? mediaInfo.video_filename : mediaInfo.image_filename;
+        if (filename && mediaInfo.camera_id && !useMockData) {
+            lastDetectionDownload.href = `/api/image?camera=${encodeURIComponent(mediaInfo.camera_id)}&file=${encodeURIComponent(filename)}`;
+            lastDetectionDownload.download = filename;
+            lastDetectionDownload.style.display = '';
+        } else if (mediaInfo.fallbackUrl) {
+            lastDetectionDownload.href = mediaInfo.fallbackUrl;
+            lastDetectionDownload.download = filename || 'detection.jpg';
+            lastDetectionDownload.style.display = '';
+        } else {
+            lastDetectionDownload.style.display = 'none';
+        }
+    }
+
     function setSelectedDetection(entry, pinned = false) {
         if (pinned) {
             pinnedHistoryEntry = entry;
@@ -862,6 +886,13 @@ document.addEventListener('DOMContentLoaded', () => {
         noDetectionPlaceholder.style.display = 'none';
         detectionContent.style.display = 'block';
         lastDetectionImage.src = `${entry.imageUrl}`;
+        updateDetectionMediaUI({
+            is_video: entry.is_video,
+            video_filename: entry.video_filename,
+            image_filename: entry.image_filename,
+            camera_id: entry.camera_id,
+            fallbackUrl: entry.imageUrl
+        });
         lastDetectionTime.textContent = new Date(entry.timestamp * 1000).toLocaleString();
         lastDetectionLocation.textContent = entry.location || 'API Upload';
         if (entry.objects && entry.objects.length > 0) {
@@ -1020,7 +1051,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 timestamp: entry.timestamp,
                 location: entry.location,
                 objects: entry.objects,
-                description: entry.description
+                description: entry.description,
+                camera_id: entry.camera_id,
+                is_video: entry.is_video,
+                video_filename: entry.video_filename,
+                image_filename: entry.image_filename
             }, true);
         });
 
@@ -1158,26 +1193,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Set image source (with cache buster)
                 lastDetectionImage.src = useMockData ? data.last_detection.image_path : `/api/last-image?t=${new Date().getTime()}`;
 
-                // Media type icon + download link. Videos are analyzed via a representative
-                // thumbnail frame, but the download should fetch the original clip (video_filename),
-                // not that frame -- pictures just download the analyzed image itself.
-                const isVideo = !!data.last_detection.is_video;
-                if (lastDetectionMediaIcon) {
-                    lastDetectionMediaIcon.textContent = isVideo ? '🎥' : '📷';
-                    lastDetectionMediaIcon.title = isVideo ? 'Video' : 'Picture';
-                }
-                if (lastDetectionDownload) {
-                    const downloadFilename = isVideo ? data.last_detection.video_filename : data.last_detection.image_filename;
-                    if (downloadFilename) {
-                        lastDetectionDownload.href = useMockData
-                            ? data.last_detection.image_path
-                            : `/api/image?camera=${encodeURIComponent(data.last_detection.camera_id)}&file=${encodeURIComponent(downloadFilename)}`;
-                        lastDetectionDownload.download = downloadFilename;
-                        lastDetectionDownload.style.display = '';
-                    } else {
-                        lastDetectionDownload.style.display = 'none';
-                    }
-                }
+                updateDetectionMediaUI({
+                    is_video: data.last_detection.is_video,
+                    video_filename: data.last_detection.video_filename,
+                    image_filename: data.last_detection.image_filename,
+                    camera_id: data.last_detection.camera_id,
+                    fallbackUrl: useMockData ? data.last_detection.image_path : null
+                });
 
                 const timeStr = new Date(data.last_detection.timestamp * 1000).toLocaleString();
                 lastDetectionTime.textContent = timeStr;
