@@ -574,8 +574,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 `).join('')}
                 <div>
                     <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:4px;">🏷️ Detected Classes (pictures)</div>
-                    <div class="classes-checklist" style="max-height:130px; overflow-y:auto; border:1px solid var(--card-border); border-radius:4px; padding:6px; display:flex; flex-wrap:wrap; gap:4px 10px; margin-bottom:4px;"></div>
-                    <div class="classes-default-hint" style="font-size:0.7rem; color:var(--text-muted); margin-bottom:6px;"></div>
+                    <button type="button" class="btn btn-secondary classes-dropdown-toggle" style="width:100%; display:flex; justify-content:space-between; align-items:center; gap:6px;">
+                        <span class="classes-summary" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Loading…</span>
+                        <span class="classes-toggle-arrow">▾</span>
+                    </button>
+                    <div class="classes-dropdown-panel" style="display:none; border:1px solid var(--card-border); border-radius:4px; margin-top:4px; padding:6px;">
+                        <input type="text" class="camera-search-input classes-filter-input" style="width:100%; margin-bottom:6px;" placeholder="Filter classes…">
+                        <div class="classes-checklist" style="max-height:140px; overflow-y:auto; display:flex; flex-direction:column; gap:1px;"></div>
+                    </div>
+                    <div class="classes-default-hint" style="font-size:0.7rem; color:var(--text-muted); margin:4px 0;"></div>
                     <div style="display:flex; gap:6px;">
                         <button class="btn btn-secondary pop-save-classes">Save</button>
                         <button class="btn btn-outline pop-clear-classes">Use Default</button>
@@ -629,22 +636,57 @@ document.addEventListener('DOMContentLoaded', () => {
             };
         });
 
-        // Wire the detected-classes checklist. If this scope has no explicit override of
-        // its own, pre-check whatever is actually in effect (inherited from device/global/
+        // Wire the detected-classes dropdown. If this scope has no explicit override of its
+        // own, pre-check whatever is actually in effect (inherited from device/global/
         // --classes) so the checklist always reflects reality, not a blank slate.
         const classesInfo = await getAvailableClasses();
         const ownOverride = (scopeData?.classes || '').trim();
         const effectiveClasses = ownOverride || resolveEffectiveClasses(scope, classesInfo.default);
         const currentClasses = effectiveClasses.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+
         const checklistEl = notificationsMenu.querySelector('.classes-checklist');
         checklistEl.innerHTML = classesInfo.available.map(name => `
-            <label style="display:flex; align-items:center; gap:4px; font-size:0.78rem; white-space:nowrap;">
+            <label data-name="${name.toLowerCase()}" style="display:flex; align-items:center; gap:6px; font-size:0.78rem; padding:2px 4px; cursor:pointer;">
                 <input type="checkbox" class="class-checkbox" value="${name}" ${currentClasses.includes(name.toLowerCase()) ? 'checked' : ''}>
                 ${name}
             </label>
         `).join('');
+
         const hintEl = notificationsMenu.querySelector('.classes-default-hint');
         hintEl.textContent = ownOverride ? 'Custom selection for this scope' : `Inherited (no override set): ${effectiveClasses}`;
+
+        const summaryEl = notificationsMenu.querySelector('.classes-summary');
+        function updateClassesSummary() {
+            const checked = Array.from(checklistEl.querySelectorAll('.class-checkbox:checked')).map(cb => cb.value);
+            if (checked.length === 0) summaryEl.textContent = 'No classes selected';
+            else if (checked.length === classesInfo.available.length) summaryEl.textContent = 'All classes';
+            else summaryEl.textContent = `${checked.length} selected: ${checked.slice(0, 3).join(', ')}${checked.length > 3 ? '…' : ''}`;
+        }
+        updateClassesSummary();
+        checklistEl.onchange = updateClassesSummary;
+
+        // Collapsed by default; reset any leftover filter/scroll state from a previous open.
+        const panelEl = notificationsMenu.querySelector('.classes-dropdown-panel');
+        const arrowEl = notificationsMenu.querySelector('.classes-toggle-arrow');
+        const filterInput = notificationsMenu.querySelector('.classes-filter-input');
+        panelEl.style.display = 'none';
+        arrowEl.textContent = '▾';
+        filterInput.value = '';
+        checklistEl.querySelectorAll('label').forEach(label => { label.style.display = 'flex'; });
+
+        notificationsMenu.querySelector('.classes-dropdown-toggle').onclick = (e) => {
+            e.stopPropagation();
+            const isOpen = panelEl.style.display !== 'none';
+            panelEl.style.display = isOpen ? 'none' : 'block';
+            arrowEl.textContent = isOpen ? '▾' : '▴';
+            if (!isOpen) filterInput.focus();
+        };
+        filterInput.oninput = () => {
+            const q = filterInput.value.trim().toLowerCase();
+            checklistEl.querySelectorAll('label').forEach(label => {
+                label.style.display = !q || label.dataset.name.includes(q) ? 'flex' : 'none';
+            });
+        };
 
         notificationsMenu.querySelector('.pop-save-classes').onclick = async () => {
             const checked = Array.from(notificationsMenu.querySelectorAll('.class-checkbox:checked')).map(cb => cb.value);
