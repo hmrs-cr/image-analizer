@@ -539,6 +539,38 @@ document.addEventListener('DOMContentLoaded', () => {
         return cachedClassesInfo;
     }
 
+    // COCO's official supercategories, used to group the class checklist. Any class name
+    // the loaded model reports that isn't in here (a custom-trained model, say) falls into
+    // an 'Other' group appended at the end, so grouping degrades gracefully.
+    const COCO_CLASS_GROUPS = [
+        ['Person', ['person']],
+        ['Vehicles', ['bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat']],
+        ['Outdoor', ['traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench']],
+        ['Animals', ['bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe']],
+        ['Accessories', ['backpack', 'umbrella', 'handbag', 'tie', 'suitcase']],
+        ['Sports', ['frisbee', 'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket']],
+        ['Kitchenware', ['bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl']],
+        ['Food', ['banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake']],
+        ['Furniture', ['chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet']],
+        ['Electronics', ['tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone']],
+        ['Appliances', ['microwave', 'oven', 'toaster', 'sink', 'refrigerator']],
+        ['Indoor', ['book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']]
+    ];
+    const CLASS_NAME_TO_GROUP = {};
+    COCO_CLASS_GROUPS.forEach(([group, names]) => names.forEach(name => { CLASS_NAME_TO_GROUP[name] = group; }));
+
+    // Buckets `names` into COCO_CLASS_GROUPS order (unknown names collected under 'Other').
+    function groupClassNames(names) {
+        const byGroup = new Map();
+        names.forEach(name => {
+            const group = CLASS_NAME_TO_GROUP[name.toLowerCase()] || 'Other';
+            if (!byGroup.has(group)) byGroup.set(group, []);
+            byGroup.get(group).push(name);
+        });
+        const order = [...COCO_CLASS_GROUPS.map(([group]) => group), 'Other'];
+        return order.filter(group => byGroup.has(group)).map(group => [group, byGroup.get(group)]);
+    }
+
     // In-place notifications menu (reused): per media type, lets you snooze and/or
     // redirect notifications to a specific Telegram chat ID for this camera ('all' for global).
     let notificationsMenu = null;
@@ -645,11 +677,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const currentClasses = effectiveClasses.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 
         const checklistEl = notificationsMenu.querySelector('.classes-checklist');
-        checklistEl.innerHTML = classesInfo.available.map(name => `
-            <label data-name="${name.toLowerCase()}" style="display:flex; align-items:center; gap:6px; font-size:0.78rem; padding:2px 4px; cursor:pointer;">
-                <input type="checkbox" class="class-checkbox" value="${name}" ${currentClasses.includes(name.toLowerCase()) ? 'checked' : ''}>
-                ${name}
-            </label>
+        checklistEl.innerHTML = groupClassNames(classesInfo.available).map(([group, names]) => `
+            <div class="classes-group">
+                <div class="classes-group-header" style="font-size:0.68rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); padding:5px 4px 2px;">${group}</div>
+                ${names.map(name => `
+                    <label data-name="${name.toLowerCase()}" style="display:flex; align-items:center; gap:6px; font-size:0.78rem; padding:2px 4px 2px 10px; cursor:pointer;">
+                        <input type="checkbox" class="class-checkbox" value="${name}" ${currentClasses.includes(name.toLowerCase()) ? 'checked' : ''}>
+                        ${name}
+                    </label>
+                `).join('')}
+            </div>
         `).join('');
 
         const hintEl = notificationsMenu.querySelector('.classes-default-hint');
@@ -673,6 +710,7 @@ document.addEventListener('DOMContentLoaded', () => {
         arrowEl.textContent = '▾';
         filterInput.value = '';
         checklistEl.querySelectorAll('label').forEach(label => { label.style.display = 'flex'; });
+        checklistEl.querySelectorAll('.classes-group').forEach(groupEl => { groupEl.style.display = 'block'; });
 
         notificationsMenu.querySelector('.classes-dropdown-toggle').onclick = (e) => {
             e.stopPropagation();
@@ -683,8 +721,14 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         filterInput.oninput = () => {
             const q = filterInput.value.trim().toLowerCase();
-            checklistEl.querySelectorAll('label').forEach(label => {
-                label.style.display = !q || label.dataset.name.includes(q) ? 'flex' : 'none';
+            checklistEl.querySelectorAll('.classes-group').forEach(groupEl => {
+                let anyVisible = false;
+                groupEl.querySelectorAll('label').forEach(label => {
+                    const match = !q || label.dataset.name.includes(q);
+                    label.style.display = match ? 'flex' : 'none';
+                    if (match) anyVisible = true;
+                });
+                groupEl.style.display = anyVisible ? 'block' : 'none';
             });
         };
 
