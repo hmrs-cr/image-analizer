@@ -232,6 +232,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 'Otra - Back Yard': { pictures_analyzed: 14, matches_found: 6, notifications_sent: 3, snooze: getMockSnooze(), chat_id: getMockChatId() },
                 'Otra - Garage': { pictures_analyzed: 10, matches_found: 4, notifications_sent: 3, snooze: getMockSnooze(), chat_id: getMockChatId() }
             },
+            devices: {
+                Galeron: { snooze: getMockSnooze(), chat_id: getMockChatId() },
+                Casa: { snooze: getMockSnooze(), chat_id: getMockChatId() },
+                Otra: { snooze: getMockSnooze(), chat_id: getMockChatId() }
+            },
             last_detection: {
                 timestamp: Math.floor(Date.now() / 1000) - 30,
                 location: 'Front Door • Patio',
@@ -382,7 +387,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return `📷 ${formatMediaSnooze(snooze.picture)} · 🎥 ${formatMediaSnooze(snooze.video)}`;
     }
 
-    function updateCamerasStatsTable(cameras) {
+    function updateCamerasStatsTable(cameras, devices) {
         const searchTerm = (cameraSearchInput?.value || '').trim().toLowerCase();
         const treeEntries = getCameraTreeEntries(cameras, searchTerm);
 
@@ -405,6 +410,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const totalAnalyzed = groupedCameras.reduce((sum, cam) => sum + (cam.pictures_analyzed || 0), 0);
                 const totalMatches = groupedCameras.reduce((sum, cam) => sum + (cam.matches_found || 0), 0);
                 const totalAlerts = groupedCameras.reduce((sum, cam) => sum + (cam.notifications_sent || 0), 0);
+                const deviceData = (devices || {})[entry.home];
+                const deviceSnoozeText = formatSnoozeCellLabel(deviceData?.snooze);
+                const deviceSnoozeColor = isSnoozeActive(deviceData?.snooze) ? 'var(--warning)' : 'var(--success)';
                 html += `
                     <tr class="camera-group-row">
                         <td colspan="5" style="padding: 8px 0 6px 4px; font-size: 0.78rem; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em;">
@@ -413,8 +421,9 @@ document.addEventListener('DOMContentLoaded', () => {
                                     <span>${isCollapsed ? '▶' : '▼'}</span>
                                     <span>${entry.home}</span>
                                 </button>
-                                <span class="camera-group-summary">
+                                <span class="camera-group-summary" style="display:flex; align-items:center; gap:10px;">
                                     ${groupedCameras.length} cams • ${totalAnalyzed} analyzed • ${totalMatches} matches • ${totalAlerts} alerts
+                                    <button class="notifications-cell-btn device-notifications-btn" data-device="${entry.home}" style="background:none;border:none;color:${deviceSnoozeColor};font-weight:500;cursor:pointer;text-transform:none;letter-spacing:normal;">${deviceSnoozeText}</button>
                                 </span>
                             </div>
                         </td>
@@ -463,13 +472,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else {
                     collapsedGroups.add(home);
                 }
-                updateCamerasStatsTable(cameras);
+                updateCamerasStatsTable(cameras, devices);
             });
         });
-        document.querySelectorAll('.notifications-cell-btn').forEach(btn => {
+        document.querySelectorAll('.notifications-cell-btn[data-camera]').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const camera = btn.dataset.camera;
-                showNotificationsMenu(camera, btn, cameras[camera]);
+                showNotificationsMenu({ type: 'camera', name: camera }, btn, cameras[camera]);
+                e.stopPropagation();
+            });
+        });
+        document.querySelectorAll('.device-notifications-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const device = btn.dataset.device;
+                showNotificationsMenu({ type: 'device', name: device }, btn, (devices || {})[device]);
                 e.stopPropagation();
             });
         });
@@ -528,7 +544,9 @@ document.addEventListener('DOMContentLoaded', () => {
         notificationsMenu.addEventListener('click', (e) => e.stopPropagation());
     }
 
-    async function showNotificationsMenu(camera, anchorEl, camData) {
+    // `scope` is { type: 'global'|'device'|'camera', name: string } -- 'name' is unused for
+    // 'global'. Resolution order enforced server-side is camera > device > global.
+    async function showNotificationsMenu(scope, anchorEl, scopeData) {
         if (!notificationsMenu) createNotificationsMenu();
         // Position menu near anchor
         const rect = anchorEl.getBoundingClientRect();
@@ -536,7 +554,7 @@ document.addEventListener('DOMContentLoaded', () => {
         notificationsMenu.style.left = `${rect.left + window.scrollX}px`;
         notificationsMenu.style.display = 'block';
 
-        const chatIdOverrides = camData?.chat_id || {};
+        const chatIdOverrides = scopeData?.chat_id || {};
         const defaultChatId = await getDefaultChatId();
 
         // Wire chat ID inputs
@@ -548,7 +566,7 @@ document.addEventListener('DOMContentLoaded', () => {
         notificationsMenu.querySelectorAll('.pop-save-chat').forEach(b => {
             b.onclick = async () => {
                 const input = notificationsMenu.querySelector(`.chat-id-input[data-media="${b.dataset.media}"]`);
-                await sendNotifyChat(camera, input.value.trim(), b.dataset.media);
+                await sendNotifyChat(scope, input.value.trim(), b.dataset.media);
                 hideNotificationsMenu();
             };
         });
@@ -557,13 +575,13 @@ document.addEventListener('DOMContentLoaded', () => {
         notificationsMenu.querySelectorAll('.pop-snooze').forEach(b => {
             b.onclick = async () => {
                 const minutes = b.dataset.minutes === 'forever' ? 'forever' : parseInt(b.dataset.minutes, 10);
-                await sendSnooze(camera, minutes, b.dataset.media);
+                await sendSnooze(scope, minutes, b.dataset.media);
                 hideNotificationsMenu();
             };
         });
         notificationsMenu.querySelectorAll('.pop-cancel').forEach(b => {
             b.onclick = async () => {
-                await sendSnooze(camera, 0, b.dataset.media);
+                await sendSnooze(scope, 0, b.dataset.media);
                 hideNotificationsMenu();
             };
         });
@@ -573,40 +591,48 @@ document.addEventListener('DOMContentLoaded', () => {
         if (notificationsMenu) notificationsMenu.style.display = 'none';
     }
 
-    // Send chat-ID-override API call for a specific camera ('all' for global) and media type
-    // ('picture' or 'video'). An empty chatId clears the override.
-    async function sendNotifyChat(camera, chatId, mediaType) {
+    // Builds the {camera, device} pair the backend expects from a scope object, and a
+    // human-readable label for toasts.
+    function describeScope(scope) {
+        if (scope.type === 'device') return { camera: 'all', device: scope.name, label: `Device "${scope.name}"` };
+        if (scope.type === 'camera') return { camera: scope.name, device: '', label: `Camera "${scope.name}"` };
+        return { camera: 'all', device: '', label: 'All cameras' };
+    }
+
+    // Send chat-ID-override API call for the given scope (camera, device, or global) and
+    // media type ('picture' or 'video'). An empty chatId clears the override.
+    async function sendNotifyChat(scope, chatId, mediaType) {
+        const { camera, device, label } = describeScope(scope);
         try {
             const response = await fetch('/api/notify-chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ chat_id: chatId, camera, media_type: mediaType })
+                body: JSON.stringify({ chat_id: chatId, camera, device, media_type: mediaType })
             });
             if (!response.ok) throw new Error('notify-chat failed');
-            const targetText = camera === 'all' ? 'All cameras' : `Camera "${camera}"`;
-            if (chatId) showToast(`${targetText} (${mediaType}s) will notify chat ${chatId}`, 'success');
-            else showToast(`${targetText} (${mediaType}s) chat override cleared`, 'success');
+            if (chatId) showToast(`${label} (${mediaType}s) will notify chat ${chatId}`, 'success');
+            else showToast(`${label} (${mediaType}s) chat override cleared`, 'success');
             fetchStatus();
         } catch (err) {
             showToast('Failed to save chat ID', 'error');
         }
     }
 
-    // Send snooze API call for a specific camera ('all' for global) and media type
+    // Send snooze API call for the given scope (camera, device, or global) and media type
     // ('picture', 'video', or 'all' for both).
-    async function sendSnooze(camera, minutes, mediaType = 'all') {
+    async function sendSnooze(scope, minutes, mediaType = 'all') {
+        const { camera, device, label } = describeScope(scope);
         try {
             const response = await fetch('/api/snooze', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ minutes, camera, media_type: mediaType })
+                body: JSON.stringify({ minutes, camera, device, media_type: mediaType })
             });
             if (!response.ok) throw new Error('snooze failed');
-            const targetText = camera === 'all' ? 'All cameras' : `Camera "${camera}"`;
             const mediaText = mediaType === 'all' ? '' : ` (${mediaType}s)`;
-            if (minutes === 0) showToast(`Snooze cancelled for ${targetText}${mediaText}`, 'success');
-            else if (minutes === 'forever') showToast(`${targetText}${mediaText} snoozed forever`, 'warning');
-            else showToast(`${targetText}${mediaText} snoozed for ${minutes} minutes`, 'warning');
+            if (minutes === 0) showToast(`Snooze cancelled for ${label}${mediaText}`, 'success');
+            else if (minutes === 'forever') showToast(`${label}${mediaText} snoozed forever`, 'warning');
+            else showToast(`${label}${mediaText} snoozed for ${minutes} minutes`, 'warning');
             fetchStatus();
         } catch (err) {
             showToast('Failed to apply snooze', 'error');
@@ -907,7 +933,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // Cameras Stats & Dropdown Select Option Updates
-            updateCamerasStatsTable(data.cameras);
+            updateCamerasStatsTable(data.cameras, data.devices);
             setTableCameraSelection();
             await loadHistory(currentCameraFilter);
 
@@ -960,7 +986,7 @@ document.addEventListener('DOMContentLoaded', () => {
             serverStatus.className = 'status-badge error-badge';
             statusText.textContent = 'Mock Data';
             console.error('Status fetch error:', error);
-            updateCamerasStatsTable(currentStatusData.cameras);
+            updateCamerasStatsTable(currentStatusData.cameras, currentStatusData.devices);
             setTableCameraSelection();
             await loadHistory(currentCameraFilter);
         } finally {
@@ -991,7 +1017,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (globalNotificationsBtn) {
         globalNotificationsBtn.addEventListener('click', (e) => {
-            showNotificationsMenu('all', globalNotificationsBtn, currentStatusData?.global);
+            showNotificationsMenu({ type: 'global', name: 'all' }, globalNotificationsBtn, currentStatusData?.global);
             e.stopPropagation();
         });
     }
@@ -999,7 +1025,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (cameraSearchInput) {
         cameraSearchInput.addEventListener('input', () => {
             if (currentStatusData) {
-                updateCamerasStatsTable(currentStatusData.cameras);
+                updateCamerasStatsTable(currentStatusData.cameras, currentStatusData.devices);
                 setTableCameraSelection();
             }
         });
@@ -1025,7 +1051,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (currentStatusData) {
-                updateCamerasStatsTable(currentStatusData.cameras);
+                updateCamerasStatsTable(currentStatusData.cameras, currentStatusData.devices);
                 setTableCameraSelection();
             }
         });

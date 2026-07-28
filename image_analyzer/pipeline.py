@@ -48,12 +48,12 @@ def handle_video(config, video_path, device_name="DVR", channel_name="Camera", c
     caption = f"*Video* en *{location_context}*"
 
     cam_stats = get_camera_stats(camera_id)
-    effective_chat_id = chat_id if force_chat_id else resolve_notify_chat_id(camera_id, "video", chat_id, config)
+    effective_chat_id = chat_id if force_chat_id else resolve_notify_chat_id(camera_id, device_name, "video", chat_id, config)
 
     notified = False
     if silent:
         print(f"Video notification explicitly silenced for camera {camera_id}.", file=sys.stderr)
-    elif is_snoozed(camera_id, "video"):
+    elif is_snoozed(camera_id, device_name, "video"):
         print(f"Video notifications are currently snoozed for camera {camera_id}. Bypassing Telegram notification.", file=sys.stderr)
     elif effective_chat_id:
         notified = send_telegram_video(config, video_path, caption, effective_chat_id)
@@ -166,8 +166,8 @@ def analyze_image(config, model, TARGET_CLASSES, img_path, device_name="DVR", ch
 
     # Determine snooze/notification outcome before persisting the entry, so the sidecar
     # and in-memory history record whether an alert actually went out.
-    snoozed = is_snoozed(camera_id, "picture")
-    effective_chat_id = chat_id if force_chat_id else resolve_notify_chat_id(camera_id, "picture", chat_id, config)
+    snoozed = is_snoozed(camera_id, device_name, "picture")
+    effective_chat_id = chat_id if force_chat_id else resolve_notify_chat_id(camera_id, device_name, "picture", chat_id, config)
 
     notified = False
     if silent:

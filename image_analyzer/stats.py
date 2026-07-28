@@ -43,6 +43,7 @@ stats = {
         "chat_id": _new_chat_id_overrides()
     },
     "cameras": {},
+    "devices": {},
     "history": {},
     "last_detection": None,
     "last_image_path": None,
@@ -72,25 +73,50 @@ def get_camera_stats(camera_id):
         return stats["cameras"][camera_id]
 
 
-def is_snoozed(camera_id, media_type):
+def get_device_stats(device_name):
+    with stats_lock:
+        if device_name not in stats["devices"]:
+            stats["devices"][device_name] = {
+                "snooze": _new_snooze_state(),
+                "chat_id": _new_chat_id_overrides()
+            }
+        return stats["devices"][device_name]
+
+
+def is_snoozed(camera_id, device_name, media_type):
     """Whether notifications for this camera/media_type are currently snoozed, checking
-    both the per-camera and global snooze settings."""
+    the per-camera, per-device, and global snooze settings -- any one of the three being
+    active is enough to snooze."""
     now = time.time()
     with stats_lock:
         cam_snooze = get_camera_stats(camera_id)["snooze"][media_type]
+        device_snooze = get_device_stats(device_name)["snooze"][media_type]
         global_snooze = stats["global"]["snooze"][media_type]
-    return now < cam_snooze or now < global_snooze
+    return now < cam_snooze or now < device_snooze or now < global_snooze
 
 
-def set_snooze(camera, media_type, until_time):
-    """Sets snooze_until for `camera` ('all' for the global setting) and `media_type`
-    ('picture', 'video', or 'all' for both). Returns the updated snooze sub-dict."""
+def _resolve_scope_stats(camera, device):
+    """Shared scope resolution for set_snooze/set_notify_chat_id: a non-empty `device`
+    targets that device, else a `camera` other than 'all' targets that camera, else the
+    global setting."""
+    if device:
+        return get_device_stats(device)
+    if camera and camera != "all":
+        return get_camera_stats(camera)
+    return None
+
+
+def set_snooze(camera, media_type, until_time, device=""):
+    """Sets snooze_until for `device` (device-level), else `camera` ('all' for the global
+    setting), and `media_type` ('picture', 'video', or 'all' for both). Returns the updated
+    snooze sub-dict."""
     types = MEDIA_TYPES if media_type == "all" else (media_type,)
     for t in types:
         if t not in MEDIA_TYPES:
             raise ValueError(f"Unknown media_type: {media_type}")
     with stats_lock:
-        target = stats["global"]["snooze"] if camera == "all" else get_camera_stats(camera)["snooze"]
+        scoped = _resolve_scope_stats(camera, device)
+        target = scoped["snooze"] if scoped is not None else stats["global"]["snooze"]
         for t in types:
             target[t] = until_time
         return dict(target)
@@ -110,31 +136,33 @@ def snooze_status(snooze_dict):
     return status
 
 
-def set_notify_chat_id(camera, media_type, chat_id_value):
-    """Sets the notification chat-ID override for `camera` ('all' for the global setting)
-    and `media_type` ('picture', 'video', or 'all' for both). An empty string clears the
-    override, falling back to resolve_notify_chat_id's lower-priority sources. Returns the
-    updated chat_id sub-dict."""
+def set_notify_chat_id(camera, media_type, chat_id_value, device=""):
+    """Sets the notification chat-ID override for `device` (device-level), else `camera`
+    ('all' for the global setting), and `media_type` ('picture', 'video', or 'all' for
+    both). An empty string clears the override, falling back to resolve_notify_chat_id's
+    lower-priority sources. Returns the updated chat_id sub-dict."""
     types = MEDIA_TYPES if media_type == "all" else (media_type,)
     for t in types:
         if t not in MEDIA_TYPES:
             raise ValueError(f"Unknown media_type: {media_type}")
     with stats_lock:
-        target = stats["global"]["chat_id"] if camera == "all" else get_camera_stats(camera)["chat_id"]
+        scoped = _resolve_scope_stats(camera, device)
+        target = scoped["chat_id"] if scoped is not None else stats["global"]["chat_id"]
         for t in types:
             target[t] = chat_id_value
         return dict(target)
 
 
-def resolve_notify_chat_id(camera_id, media_type, fallback_chat_id, config):
+def resolve_notify_chat_id(camera_id, device_name, media_type, fallback_chat_id, config):
     """Resolves the Telegram chat ID to notify, in priority order: a per-camera override
-    for this media_type, then a global override, then whatever the caller passed in (e.g. a
-    source's own default or a per-request override), then finally the configured
-    --telegram-chat-id/TELEGRAM_CHAT_ID default."""
+    for this media_type, then a per-device override, then a global override, then whatever
+    the caller passed in (e.g. a source's own default or a per-request override), then
+    finally the configured --telegram-chat-id/TELEGRAM_CHAT_ID default."""
     with stats_lock:
         cam_override = get_camera_stats(camera_id)["chat_id"][media_type]
+        device_override = get_device_stats(device_name)["chat_id"][media_type]
         global_override = stats["global"]["chat_id"][media_type]
-    return cam_override or global_override or fallback_chat_id or config.telegram_chat_id
+    return cam_override or device_override or global_override or fallback_chat_id or config.telegram_chat_id
 
 
 def notification_settings_path(config):
@@ -155,6 +183,10 @@ def save_notification_settings(config):
             "cameras": {
                 cam_id: {"snooze": dict(cam["snooze"]), "chat_id": dict(cam["chat_id"])}
                 for cam_id, cam in stats["cameras"].items()
+            },
+            "devices": {
+                device_name: {"snooze": dict(dev["snooze"]), "chat_id": dict(dev["chat_id"])}
+                for device_name, dev in stats["devices"].items()
             }
         }
     try:
@@ -200,6 +232,14 @@ def load_notification_settings(config):
                     cam["snooze"][t] = cam_state["snooze"][t]
                 if t in cam_state.get("chat_id", {}):
                     cam["chat_id"][t] = cam_state["chat_id"][t]
+
+        for device_name, dev_state in state.get("devices", {}).items():
+            dev = get_device_stats(device_name)
+            for t in MEDIA_TYPES:
+                if t in dev_state.get("snooze", {}):
+                    dev["snooze"][t] = dev_state["snooze"][t]
+                if t in dev_state.get("chat_id", {}):
+                    dev["chat_id"][t] = dev_state["chat_id"][t]
 
     print("Restored notification settings from disk.", file=sys.stderr)
 

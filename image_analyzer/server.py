@@ -100,6 +100,13 @@ class UploadHandler(BaseHTTPRequestHandler):
                         "chat_id": dict(cam_stat["chat_id"])
                     }
 
+                devices_data = {}
+                for name, dev_stat in stats["devices"].items():
+                    devices_data[name] = {
+                        "snooze": snooze_status(dev_stat["snooze"]),
+                        "chat_id": dict(dev_stat["chat_id"])
+                    }
+
                 data = {
                     "uptime": time.time() - START_TIME,
                     "global": {
@@ -110,6 +117,7 @@ class UploadHandler(BaseHTTPRequestHandler):
                         "chat_id": dict(stats["global"]["chat_id"])
                     },
                     "cameras": cameras_data,
+                    "devices": devices_data,
                     "last_detection": stats["last_detection"]
                 }
             self.send_json(data)
@@ -292,6 +300,7 @@ class UploadHandler(BaseHTTPRequestHandler):
                 data = json.loads(body)
                 minutes = data.get("minutes", 0)
                 camera = data.get("camera", "all")
+                device = data.get("device", "")
                 media_type = data.get("media_type", "all")
 
                 if media_type not in ("picture", "video", "all"):
@@ -306,10 +315,10 @@ class UploadHandler(BaseHTTPRequestHandler):
                     minutes = float(minutes)
                     until_time = time.time() + (minutes * 60) if minutes > 0 else 0.0
 
-                set_snooze(camera, media_type, until_time)
+                set_snooze(camera, media_type, until_time, device=device)
                 save_notification_settings(self.config)
 
-                self.send_json({"status": "success", "camera": camera, "media_type": media_type, "snooze_until": until_time})
+                self.send_json({"status": "success", "camera": camera, "device": device, "media_type": media_type, "snooze_until": until_time})
             except Exception as e:
                 self.send_response(500)
                 self.end_headers()
@@ -321,6 +330,7 @@ class UploadHandler(BaseHTTPRequestHandler):
                 body = self.rfile.read(content_length).decode('utf-8')
                 data = json.loads(body)
                 camera = data.get("camera", "all")
+                device = data.get("device", "")
                 media_type = data.get("media_type", "all")
                 chat_id_value = (data.get("chat_id") or "").strip()
 
@@ -330,10 +340,10 @@ class UploadHandler(BaseHTTPRequestHandler):
                     self.wfile.write(b"Bad Request: media_type must be 'picture', 'video', or 'all'")
                     return
 
-                set_notify_chat_id(camera, media_type, chat_id_value)
+                set_notify_chat_id(camera, media_type, chat_id_value, device=device)
                 save_notification_settings(self.config)
 
-                self.send_json({"status": "success", "camera": camera, "media_type": media_type, "chat_id": chat_id_value})
+                self.send_json({"status": "success", "camera": camera, "device": device, "media_type": media_type, "chat_id": chat_id_value})
             except Exception as e:
                 self.send_response(500)
                 self.end_headers()
