@@ -526,8 +526,9 @@ body {
 
 .detail-row {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 6px;
     min-width: 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.03);
     padding-bottom: 8px;
@@ -557,6 +558,7 @@ body {
 
 .description-row {
     grid-column: 1 / -1;
+    flex-direction: column;
     gap: 4px;
 }
 
