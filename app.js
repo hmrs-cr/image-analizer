@@ -629,9 +629,13 @@ document.addEventListener('DOMContentLoaded', () => {
             };
         });
 
-        // Wire the detected-classes checklist
+        // Wire the detected-classes checklist. If this scope has no explicit override of
+        // its own, pre-check whatever is actually in effect (inherited from device/global/
+        // --classes) so the checklist always reflects reality, not a blank slate.
         const classesInfo = await getAvailableClasses();
-        const currentClasses = (scopeData?.classes || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+        const ownOverride = (scopeData?.classes || '').trim();
+        const effectiveClasses = ownOverride || resolveEffectiveClasses(scope, classesInfo.default);
+        const currentClasses = effectiveClasses.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
         const checklistEl = notificationsMenu.querySelector('.classes-checklist');
         checklistEl.innerHTML = classesInfo.available.map(name => `
             <label style="display:flex; align-items:center; gap:4px; font-size:0.78rem; white-space:nowrap;">
@@ -640,7 +644,7 @@ document.addEventListener('DOMContentLoaded', () => {
             </label>
         `).join('');
         const hintEl = notificationsMenu.querySelector('.classes-default-hint');
-        hintEl.textContent = classesInfo.default ? `Default: ${classesInfo.default}` : '';
+        hintEl.textContent = ownOverride ? 'Custom selection for this scope' : `Inherited (no override set): ${effectiveClasses}`;
 
         notificationsMenu.querySelector('.pop-save-classes').onclick = async () => {
             const checked = Array.from(notificationsMenu.querySelectorAll('.class-checkbox:checked')).map(cb => cb.value);
@@ -663,6 +667,24 @@ document.addEventListener('DOMContentLoaded', () => {
         if (scope.type === 'device') return { camera: 'all', device: scope.name, label: `Device "${scope.name}"` };
         if (scope.type === 'camera') return { camera: scope.name, device: '', label: `Camera "${scope.name}"` };
         return { camera: 'all', device: '', label: 'All cameras' };
+    }
+
+    // Mirrors the backend's resolve_target_classes precedence (camera > device > global >
+    // --classes default) so the checklist can show what's actually in effect for `scope`
+    // even when this exact scope has no explicit override of its own.
+    function resolveEffectiveClasses(scope, classesDefault) {
+        const globalClasses = currentStatusData?.global?.classes || '';
+        const devices = currentStatusData?.devices || {};
+        if (scope.type === 'global') {
+            return globalClasses || classesDefault;
+        }
+        if (scope.type === 'device') {
+            return devices[scope.name]?.classes || globalClasses || classesDefault;
+        }
+        const separatorIndex = scope.name.indexOf(' - ');
+        const home = separatorIndex >= 0 ? scope.name.slice(0, separatorIndex).trim() : '';
+        const deviceClasses = devices[home]?.classes || '';
+        return deviceClasses || globalClasses || classesDefault;
     }
 
     // Send chat-ID-override API call for the given scope (camera, device, or global) and
