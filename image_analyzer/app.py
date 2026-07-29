@@ -1,12 +1,12 @@
 import os
 import sys
-from http.server import ThreadingHTTPServer
 
+import uvicorn
 from ultralytics import YOLO
 
 from .config import get_config
 from .pipeline import analyze_image, handle_video
-from .server import UploadHandler
+from .server import create_app
 from .sources import AVAILABLE_SOURCES
 from .stats import load_history_from_disk, load_notification_settings, prune_old_images
 from .utils import is_video_file
@@ -50,13 +50,7 @@ def main():
     if not config.analyze_shared_secret:
         print("WARNING: ANALYZE_SHARED_SECRET not set. /analyze-image is unauthenticated!", file=sys.stderr)
 
-    UploadHandler.config = config
-    UploadHandler.model = model
+    app = create_app(config, model)
 
     print(f"Starting HTTP API server on {config.host}:{config.port}...", file=sys.stderr)
-    server = ThreadingHTTPServer((config.host, config.port), UploadHandler)
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        print("\nShutting down server...", file=sys.stderr)
-        server.server_close()
+    uvicorn.run(app, host=config.host, port=config.port, log_level="warning")

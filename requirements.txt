@@ -4,3 +4,6 @@ deepface
 imapclient
 pyftpdlib
 google-genai
+fastapi
+uvicorn[standard]
+python-multipart

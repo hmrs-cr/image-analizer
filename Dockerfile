@@ -12,14 +12,17 @@ WORKDIR /app
 
 # Install all heavy Python dependencies required by both scripts
 # We do this before copying scripts to leverage Docker's layer caching
+# deepface is intentionally omitted below -- it's optional and heavy, see Dockerfile note above
 RUN pip install --no-cache-dir \
     ultralytics \
-#    deepface \
     imapclient \
     pyftpdlib \
     tf-keras \
     requests \
-    google-genai
+    google-genai \
+    fastapi \
+    "uvicorn[standard]" \
+    python-multipart
 
 # Copy the application package and entrypoint script into the image
 COPY image_analyzer ./image_analyzer
