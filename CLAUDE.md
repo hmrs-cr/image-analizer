@@ -47,8 +47,8 @@ the repo root is just a shim that calls `image_analyzer.app.main()` (kept as the
 `ENTRYPOINT` target and so `python image-analyzer-service.py` still works unchanged).
 
 - **`app.py`** — `main()` is the composition root: builds config, loads the YOLO model, computes
-  `TARGET_CLASSES` from `--classes`, starts every configured image source (see below), wires
-  `UploadHandler`'s class attributes, and runs the `ThreadingHTTPServer`.
+  `TARGET_CLASSES` from `--classes`, starts every configured image source (see below), builds the
+  FastAPI app via `server.create_app(config, model)`, and serves it with `uvicorn.run`.
 - **`config.py`** — `get_config()`, the single argparse/env-var definition for every setting.
 - **`pipeline.py`** — `analyze_image(config, model, TARGET_CLASSES, img_path, ...)` is the shared
   sink every ingestion path converges on: runs YOLO, filters detections to `TARGET_CLASSES` and
@@ -68,16 +68,19 @@ the repo root is just a shim that calls `image_analyzer.app.main()` (kept as the
 - **`utils.py`** — cross-cutting helpers: `sanitize_component`, `mask_settings`, `get_camera_folder`.
 - **`gemini.py`** / **`notify.py`** — single-function modules for the Gemini description call and
   the Telegram photo alert, respectively.
-- **`server.py`** — `UploadHandler(BaseHTTPRequestHandler)`, served via `ThreadingHTTPServer` (one
-  thread per request). Implements the dashboard's static file serving (`/`, `/style.css`, `/app.js`,
-  resolved relative to the repo root via `PROJECT_ROOT` since the module itself lives one directory
-  deeper than before), the JSON API (`/api/status`, `/api/settings`, `/api/history`, `/api/image`,
-  `/api/last-image`, `/api/snooze`, `/api/trigger-analysis`), and `POST /analyze-image` (calls
-  `pipeline.analyze_image` directly — this is a request/response ingestion path, not a background
-  source). All routes require HTTP Basic Auth (`--auth-username`/`--auth-password`) except
-  `/analyze-image`, which uses the `X-Analyze-Secret` header instead. Both auth mechanisms are
-  opt-out: if the corresponding credentials aren't configured, that check is skipped (with a
-  startup warning).
+- **`server.py`** — `create_app(config, model)` builds a FastAPI app (served via `uvicorn.run` in
+  `app.py`; sync path operations still run in a threadpool, one per request, same concurrency model
+  as before). `config`/`model` live on `app.state` rather than handler class attributes. Implements
+  the dashboard's static file serving (`/`, `/style.css`, `/app.js`, resolved relative to the repo
+  root via `PROJECT_ROOT` since the module itself lives one directory deeper than before), the JSON
+  API (`/api/status`, `/api/settings`, `/api/classes`, `/api/history`, `/api/image`,
+  `/api/last-image`, `/api/snooze`, `/api/notify-chat`, `/api/target-classes`,
+  `/api/trigger-analysis`), and `POST /analyze-image` (calls `pipeline.analyze_image`/`handle_video`
+  directly — this is a request/response ingestion path, not a background source). Auth is enforced
+  via FastAPI dependencies: `require_basic_auth` (`--auth-username`/`--auth-password`) on every
+  route except `/analyze-image`, which instead depends on `require_shared_secret` (the
+  `X-Analyze-Secret` header). Both are opt-out: if the corresponding credentials aren't configured,
+  that check is skipped (with a startup warning from `app.py`).
 - **`sources/`** — pluggable background image sources. `sources/base.py` defines the `ImageSource`
   ABC: subclasses implement `run()` (a blocking loop) and call
   `self.on_image(filepath, device_name, channel_name, chat_id)` for each new image found;

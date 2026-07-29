@@ -50,10 +50,10 @@ check.
 docker compose up -d --build
 ```
 
-The `Dockerfile` installs `ultralytics`, `imapclient`, `tf-keras`, `requests`, `google-genai`
-(DeepFace is commented out — it's optional and heavy) and pre-bakes the YOLO model into the
-image. It also expects a `security-cam.md` file (the Gemini system-prompt text) to be supplied at
-deploy time — it is intentionally not part of this repo.
+The `Dockerfile` installs `ultralytics`, `imapclient`, `tf-keras`, `requests`, `google-genai`,
+`fastapi`, `uvicorn`, `python-multipart` (DeepFace is commented out — it's optional and heavy) and
+pre-bakes the YOLO model into the image. It also expects a `security-cam.md` file (the Gemini
+system-prompt text) to be supplied at deploy time — it is intentionally not part of this repo.
 
 ## Configuration
 
@@ -105,10 +105,13 @@ All routes require HTTP Basic Auth (when configured) except `/analyze-image`, wh
 | GET | `/` | Dashboard (`index.html`) |
 | GET | `/api/status` | Live global/per-camera stats and last detection |
 | GET | `/api/settings` | Current config, with secrets redacted |
+| GET | `/api/classes` | Available YOLO class names, plus the configured default |
 | GET | `/api/history` | Paginated detection history (`?camera=&offset=&limit=`) |
 | GET | `/api/image` | A stored image (`?camera=&file=`) |
 | GET | `/api/last-image` | The most recently processed image |
 | POST | `/api/snooze` | Snooze alerts globally or per camera (`{"minutes": N, "camera": "..."}`) |
+| POST | `/api/notify-chat` | Override the Telegram chat ID globally or per camera/device |
+| POST | `/api/target-classes` | Override the YOLO target classes globally or per camera/device |
 | POST | `/api/trigger-analysis` | Re-run analysis on the last processed image |
 | POST | `/analyze-image` | Submit an image directly for analysis (`multipart/form-data`) |
 
