@@ -485,6 +485,31 @@ body {
     object-fit: contain;
 }
 
+.last-detection-image-link {
+    display: block;
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+}
+
+.last-detection-image-link.download-unavailable {
+    pointer-events: none;
+    cursor: default;
+}
+
+.last-detection-media-icon {
+    position: absolute;
+    top: 10px;
+    left: 12px;
+    font-size: 1.3rem;
+    line-height: 1;
+    padding: 5px 7px;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(4px);
+    pointer-events: none;
+}
+
 .image-overlay-meta {
     position: absolute;
     top: 0;
@@ -500,6 +525,7 @@ body {
 .image-title-pill {
     display: inline-flex;
     align-items: center;
+    margin-left: auto;
     padding: 6px 10px;
     border-radius: 999px;
     background: rgba(0, 0, 0, 0.55);

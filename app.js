@@ -868,13 +868,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (filename && mediaInfo.camera_id && !useMockData) {
             lastDetectionDownload.href = `/api/image?camera=${encodeURIComponent(mediaInfo.camera_id)}&file=${encodeURIComponent(filename)}`;
             lastDetectionDownload.download = filename;
-            lastDetectionDownload.style.display = '';
+            lastDetectionDownload.classList.remove('download-unavailable');
         } else if (mediaInfo.fallbackUrl) {
             lastDetectionDownload.href = mediaInfo.fallbackUrl;
             lastDetectionDownload.download = filename || 'detection.jpg';
-            lastDetectionDownload.style.display = '';
+            lastDetectionDownload.classList.remove('download-unavailable');
         } else {
-            lastDetectionDownload.style.display = 'none';
+            lastDetectionDownload.href = '#';
+            lastDetectionDownload.classList.add('download-unavailable');
         }
     }
 
