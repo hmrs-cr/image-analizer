@@ -65,6 +65,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let pinnedHistoryEntry = null;
     let showNoDetectionImages = false;
     let collapsedGroups = new Set();
+    let collapsedHistoryDays = new Set();
+    let historyDayGroups = new Map();
 
     // Infinite scroll state for the image history list
     const HISTORY_PAGE_SIZE = 20;
@@ -1013,6 +1015,61 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Local-day identity for an entry's timestamp, used to group consecutive history items.
+    function getDayKey(timestamp) {
+        return new Date(timestamp * 1000).toDateString();
+    }
+
+    // Human-friendly heading for a day group: "Today" / "Yesterday" / full weekday date.
+    function formatDayLabel(timestamp) {
+        const startOfDay = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x.getTime(); };
+        const date = new Date(timestamp * 1000);
+        const today = startOfDay(new Date());
+        const day = startOfDay(date);
+        if (day === today) return 'Today';
+        if (day === today - 86400000) return 'Yesterday';
+        return date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    }
+
+    // Creates (and wires the collapse toggle for) a new day group section, appended once per
+    // distinct day as history items are rendered in timestamp-descending order.
+    function createHistoryDayGroup(dayKey, timestamp) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'history-day-group';
+
+        const header = document.createElement('button');
+        header.type = 'button';
+        header.className = 'history-day-header';
+        const isCollapsed = collapsedHistoryDays.has(dayKey);
+        header.innerHTML = `
+            <span class="history-day-toggle">${isCollapsed ? '▶' : '▼'}</span>
+            <span class="history-day-label">${formatDayLabel(timestamp)}</span>
+            <span class="history-day-count">0</span>
+        `;
+
+        const body = document.createElement('div');
+        body.className = 'history-day-body';
+        body.style.display = isCollapsed ? 'none' : '';
+
+        header.addEventListener('click', () => {
+            const collapsedNow = collapsedHistoryDays.has(dayKey);
+            if (collapsedNow) collapsedHistoryDays.delete(dayKey);
+            else collapsedHistoryDays.add(dayKey);
+            body.style.display = collapsedHistoryDays.has(dayKey) ? 'none' : '';
+            header.querySelector('.history-day-toggle').textContent = collapsedHistoryDays.has(dayKey) ? '▶' : '▼';
+        });
+
+        wrapper.appendChild(header);
+        wrapper.appendChild(body);
+
+        return { wrapperEl: wrapper, bodyEl: body, headerEl: header, count: 0 };
+    }
+
+    function updateHistoryDayGroupCount(group) {
+        const countEl = group.headerEl.querySelector('.history-day-count');
+        countEl.textContent = `${group.count} image${group.count === 1 ? '' : 's'}`;
+    }
+
     function buildHistoryItemElement(entry) {
         const date = new Date(entry.timestamp * 1000).toLocaleString();
         const title = `${entry.camera_id} • ${date}`;
@@ -1032,6 +1089,12 @@ document.addEventListener('DOMContentLoaded', () => {
         img.alt = title;
         img.loading = 'lazy';
         thumbnail.appendChild(img);
+
+        const mediaIcon = document.createElement('span');
+        mediaIcon.className = 'history-media-icon';
+        mediaIcon.textContent = entry.is_video ? '🎥' : '📷';
+        mediaIcon.title = entry.is_video ? 'Video' : 'Picture';
+        thumbnail.appendChild(mediaIcon);
 
         const meta = document.createElement('div');
         meta.className = 'history-meta';
@@ -1062,13 +1125,25 @@ document.addEventListener('DOMContentLoaded', () => {
         return button;
     }
 
-    // Appends the next page of already-filtered history items to the DOM.
+    // Appends the next page of already-filtered history items to the DOM, grouped under a
+    // collapsible header per calendar day. Items arrive in timestamp-descending order, so a
+    // day's items are always contiguous -- each entry either lands in the day group already
+    // open at the end of the list, or starts a new one.
     function renderNextHistoryPage(count = HISTORY_PAGE_SIZE) {
         const nextItems = currentFilteredHistoryItems.slice(historyRenderedCount, historyRenderedCount + count);
         if (nextItems.length === 0) return;
-        const fragment = document.createDocumentFragment();
-        nextItems.forEach(entry => fragment.appendChild(buildHistoryItemElement(entry)));
-        imageHistoryList.appendChild(fragment);
+        nextItems.forEach(entry => {
+            const dayKey = getDayKey(entry.timestamp);
+            let group = historyDayGroups.get(dayKey);
+            if (!group) {
+                group = createHistoryDayGroup(dayKey, entry.timestamp);
+                historyDayGroups.set(dayKey, group);
+                imageHistoryList.appendChild(group.wrapperEl);
+            }
+            group.bodyEl.appendChild(buildHistoryItemElement(entry));
+            group.count += 1;
+            updateHistoryDayGroupCount(group);
+        });
         historyRenderedCount += nextItems.length;
     }
 
@@ -1104,6 +1179,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         currentFilteredHistoryItems = filteredItems;
         historyRenderedCount = 0;
+        historyDayGroups.clear();
         imageHistoryList.innerHTML = '';
         imageHistoryEmpty.style.display = filteredItems.length ? 'none' : 'block';
         imageHistoryEmpty.textContent = filteredItems.length ? '' : (
