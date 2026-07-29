@@ -31,7 +31,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const lastDetectionTime = document.getElementById('last-detection-time');
     const lastDetectionLocation = document.getElementById('last-detection-location');
     const lastDetectionObjects = document.getElementById('last-detection-objects');
-    const lastDetectionFaces = document.getElementById('last-detection-faces');
     const lastDetectionDesc = document.getElementById('last-detection-desc');
     const detectionTitle = document.getElementById('detection-title');
 
@@ -907,17 +906,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             lastDetectionObjects.textContent = 'None';
         }
-        const faceMatches = (entry.objects || []).filter(o => o.class === 'person' && o.person_name).map(o => o.person_name);
-        if (faceMatches.length > 0) {
-            lastDetectionFaces.textContent = [...new Set(faceMatches)].join(', ');
-            lastDetectionFaces.className = 'detail-value highlight-name';
-        } else if ((entry.objects || []).some(o => o.class === 'person')) {
-            lastDetectionFaces.textContent = 'Person detected, face unrecognized';
-            lastDetectionFaces.className = 'detail-value';
-        } else {
-            lastDetectionFaces.textContent = 'No match found';
-            lastDetectionFaces.className = 'detail-value';
-        }
         lastDetectionDesc.textContent = entry.description || 'No Gemini description generated.';
         if (detectionTitle) {
             detectionTitle.textContent = pinnedHistoryEntry ? 'History Selection' : 'Last Detection';
@@ -1292,19 +1280,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     }).join(', ');
                 } else {
                     lastDetectionObjects.textContent = 'None';
-                }
-
-                // Faces
-                const faceMatches = objects.filter(o => o.class === 'person' && o.person_name).map(o => o.person_name);
-                if (faceMatches.length > 0) {
-                    lastDetectionFaces.textContent = [...new Set(faceMatches)].join(', ');
-                    lastDetectionFaces.className = 'detail-value highlight-name';
-                } else if (objects.some(o => o.class === 'person')) {
-                    lastDetectionFaces.textContent = 'Person detected, face unrecognized';
-                    lastDetectionFaces.className = 'detail-value';
-                } else {
-                    lastDetectionFaces.textContent = 'No match found';
-                    lastDetectionFaces.className = 'detail-value';
                 }
 
                 // Gemini Analysis Description

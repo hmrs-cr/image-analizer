@@ -578,10 +578,6 @@ body {
     overflow-wrap: break-word;
 }
 
-.highlight-name {
-    color: var(--accent);
-}
-
 .description-row {
     grid-column: 1 / -1;
     flex-direction: column;
