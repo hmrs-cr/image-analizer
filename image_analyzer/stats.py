@@ -370,7 +370,7 @@ def load_sidecar_entry(sidecar_path):
         print(f"Failed to load detection sidecar {sidecar_path}: {e}", file=sys.stderr)
         return None
     camera_id = data.get("camera_id", "Unknown")
-    return {
+    entry = {
         "timestamp": data["timestamp"],
         "camera_id": camera_id,
         "location": data.get("location", ""),
@@ -379,6 +379,10 @@ def load_sidecar_entry(sidecar_path):
         "image_filename": data["image_filename"],
         "image_url": f"/api/image?camera={quote(camera_id)}&file={quote(data['image_filename'])}"
     }
+    if data.get("is_video"):
+        entry["is_video"] = True
+        entry["video_filename"] = data.get("video_filename")
+    return entry
 
 
 def get_history_page(config, camera, offset, limit):
@@ -496,7 +500,8 @@ def load_history_from_disk(config):
                 "objects": e.get("objects", []),
                 "description": e.get("description", ""),
                 "image_filename": e["image_filename"],
-                "image_url": f"/api/image?camera={quote(camera_id)}&file={quote(e['image_filename'])}"
+                "image_url": f"/api/image?camera={quote(camera_id)}&file={quote(e['image_filename'])}",
+                **({"is_video": True, "video_filename": e.get("video_filename")} if e.get("is_video") else {})
             }
             for e in entries[:MAX_CACHE_SIZE]
         ]
@@ -511,7 +516,8 @@ def load_history_from_disk(config):
             "objects": last_match.get("objects", []),
             "camera_id": last_match["camera_id"],
             "image_filename": last_match["image_filename"],
-            "image_path": last_match["_image_path"]
+            "image_path": last_match["_image_path"],
+            **({"is_video": True, "video_filename": last_match.get("video_filename")} if last_match.get("is_video") else {})
         }
         stats["last_image_path"] = last_match["_image_path"]
         stats["last_image_camera"] = (device_name, channel_name)
