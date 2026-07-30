@@ -26,6 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const noDetectionPlaceholder = document.getElementById('no-detection-placeholder');
     const detectionContent = document.getElementById('detection-content');
     const lastDetectionImage = document.getElementById('last-detection-image');
+    const lastDetectionVideo = document.getElementById('last-detection-video');
     const lastDetectionMediaIcon = document.getElementById('last-detection-media-icon');
     const lastDetectionDownload = document.getElementById('last-detection-download');
     const lastDetectionTime = document.getElementById('last-detection-time');
@@ -853,19 +854,48 @@ document.addEventListener('DOMContentLoaded', () => {
     // Hide menu when clicking outside
     document.addEventListener('click', () => hideNotificationsMenu());
 
+    // Builds the /api/image URL for a given camera + filename, or null when the pieces needed
+    // to hit the real API aren't available (mock mode, or a missing filename/camera_id).
+    function buildMediaUrl(cameraId, filename) {
+        if (!filename || !cameraId || useMockData) return null;
+        return `/api/image?camera=${encodeURIComponent(cameraId)}&file=${encodeURIComponent(filename)}`;
+    }
+
     // Shared by both the live "Last Detection" panel and history-item selection. Videos are
-    // analyzed via a representative thumbnail frame, but the download should fetch the original
-    // clip (video_filename), not that frame -- pictures just download the analyzed image itself.
+    // analyzed via a representative thumbnail frame (image_filename), but playback/download
+    // should use the original clip (video_filename), not that frame -- pictures just play/download
+    // the analyzed image itself.
     function updateDetectionMediaUI(mediaInfo) {
         const isVideo = !!mediaInfo.is_video;
         if (lastDetectionMediaIcon) {
             lastDetectionMediaIcon.textContent = isVideo ? '🎥' : '📷';
             lastDetectionMediaIcon.title = isVideo ? 'Video' : 'Picture';
         }
+
+        if (lastDetectionVideo) {
+            if (isVideo) {
+                const videoUrl = buildMediaUrl(mediaInfo.camera_id, mediaInfo.video_filename);
+                lastDetectionVideo.poster = mediaInfo.fallbackUrl || '';
+                if (videoUrl && lastDetectionVideo.src !== videoUrl) {
+                    lastDetectionVideo.src = videoUrl;
+                    lastDetectionVideo.load();
+                }
+                lastDetectionVideo.style.display = 'block';
+                if (lastDetectionDownload) lastDetectionDownload.style.display = 'none';
+            } else {
+                lastDetectionVideo.pause();
+                lastDetectionVideo.removeAttribute('src');
+                lastDetectionVideo.load();
+                lastDetectionVideo.style.display = 'none';
+                if (lastDetectionDownload) lastDetectionDownload.style.display = 'block';
+            }
+        }
+
         if (!lastDetectionDownload) return;
         const filename = isVideo ? mediaInfo.video_filename : mediaInfo.image_filename;
-        if (filename && mediaInfo.camera_id && !useMockData) {
-            lastDetectionDownload.href = `/api/image?camera=${encodeURIComponent(mediaInfo.camera_id)}&file=${encodeURIComponent(filename)}`;
+        const mediaUrl = buildMediaUrl(mediaInfo.camera_id, filename);
+        if (mediaUrl) {
+            lastDetectionDownload.href = mediaUrl;
             lastDetectionDownload.download = filename;
             lastDetectionDownload.classList.remove('download-unavailable');
         } else if (mediaInfo.fallbackUrl) {
