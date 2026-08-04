@@ -1,3 +1,4 @@
+import os
 import sys
 import time
 
@@ -45,10 +46,12 @@ def send_telegram_video(config, video_path, caption, chat_id):
     return _send_telegram_media(config, "sendVideo", "video", video_path, caption, chat_id)
 
 
-def _send_webhook_media(webhook_url, file_field, file_path, caption, extra_data=None):
-    """POSTs a media file plus metadata as multipart/form-data to an arbitrary webhook URL,
-    used as a drop-in alternative to a Telegram alert (e.g. a Home Assistant `webhook`
-    automation trigger, which accepts any multipart/form-data or JSON POST)."""
+def _send_webhook_notification(webhook_url, caption, extra_data=None):
+    """POSTs metadata (caption + extra_data, e.g. camera_id/filename) as form data to an
+    arbitrary webhook URL, used as a drop-in alternative to a Telegram alert (e.g. a Home
+    Assistant `webhook` automation trigger). The image/video itself is not attached -- the
+    receiver is expected to fetch it back from this service's `/api/image` endpoint using
+    the filename in extra_data, so the file isn't uploaded twice."""
     if not webhook_url:
         return False
 
@@ -57,23 +60,31 @@ def _send_webhook_media(webhook_url, file_field, file_path, caption, extra_data=
         data.update(extra_data)
 
     try:
-        with open(file_path, "rb") as media_file:
-            files = {file_field: media_file}
-            response = requests.post(webhook_url, data=data, files=files, timeout=15)
-            if response.status_code < 300:
-                print("Webhook alert sent successfully.", file=sys.stderr)
-                return True
-            print(f"Webhook error: {response.status_code} {response.text}", file=sys.stderr)
+        response = requests.post(webhook_url, data=data, timeout=15)
+        if response.status_code < 300:
+            print("Webhook alert sent successfully.", file=sys.stderr)
+            return True
+        print(f"Webhook error: {response.status_code} {response.text}", file=sys.stderr)
     except Exception as e:
         print(f"Failed to send webhook notification: {e}", file=sys.stderr)
     return False
 
 
 def send_webhook_alert(webhook_url, img_path, caption, extra_data=None):
-    """Sends the analyzed photo to a webhook URL (Home Assistant-compatible) instead of Telegram."""
-    return _send_webhook_media(webhook_url, "image", img_path, caption, extra_data)
+    """Notifies a webhook URL (Home Assistant-compatible) about an analyzed photo, instead
+    of Telegram. Sends `image_filename` so the receiver can fetch the photo itself via
+    `/api/image` -- see _send_webhook_notification."""
+    data = {"image_filename": os.path.basename(img_path)}
+    if extra_data:
+        data.update(extra_data)
+    return _send_webhook_notification(webhook_url, caption, data)
 
 
 def send_webhook_video(webhook_url, video_path, caption, extra_data=None):
-    """Sends a video clip to a webhook URL (Home Assistant-compatible) instead of Telegram."""
-    return _send_webhook_media(webhook_url, "video", video_path, caption, extra_data)
+    """Notifies a webhook URL (Home Assistant-compatible) about an analyzed video clip,
+    instead of Telegram. Sends `video_filename` so the receiver can fetch the clip itself
+    via `/api/image` -- see _send_webhook_notification."""
+    data = {"is_video": "1", "video_filename": os.path.basename(video_path)}
+    if extra_data:
+        data.update(extra_data)
+    return _send_webhook_notification(webhook_url, caption, data)
