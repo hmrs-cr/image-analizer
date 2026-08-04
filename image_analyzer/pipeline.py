@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 import time
@@ -12,13 +13,14 @@ except ImportError:
     DEEPFACE_AVAILABLE = False
 
 from .gemini import get_gemini_description
-from .notify import send_telegram_alert, send_telegram_video
+from .notify import send_telegram_alert, send_telegram_video, send_webhook_alert, send_webhook_video
 from .stats import (
     MAX_CACHE_SIZE,
     get_camera_stats,
     is_snoozed,
     maybe_prune_old_images,
     resolve_notify_chat_id,
+    resolve_notify_webhook,
     resolve_target_classes,
     save_detection_sidecar,
     stats,
@@ -137,11 +139,17 @@ def _build_match_caption(config, image_path, detected_objects, location_context,
     return gemini_desc, caption
 
 
-def _maybe_notify(config, camera_id, device_name, media_type, chat_id, force_chat_id, silent, is_match, cam_stats, send_fn):
-    """Resolves snooze + chat-ID overrides for (camera_id, device_name, media_type), then
-    calls send_fn(effective_chat_id) if nothing suppresses the notification. Returns
-    whether a notification was actually sent."""
+def _maybe_notify(config, camera_id, device_name, media_type, chat_id, force_chat_id, silent, is_match, cam_stats, send_fn, webhook_fn):
+    """Resolves snooze + chat-ID/webhook overrides for (camera_id, device_name, media_type),
+    then delivers the notification if nothing suppresses it. A webhook override (see
+    resolve_notify_webhook) takes priority over Telegram for the same scope, calling
+    webhook_fn(effective_webhook) instead of send_fn(effective_chat_id) -- this lets a
+    scope redirect notifications to e.g. a Home Assistant automation instead of Telegram.
+    `force_chat_id` (the /analyze-image explicit per-request override) bypasses webhook
+    resolution entirely and always goes straight to Telegram. Returns whether a
+    notification was actually sent."""
     snoozed = is_snoozed(camera_id, device_name, media_type)
+    effective_webhook = "" if force_chat_id else resolve_notify_webhook(camera_id, device_name, media_type)
     effective_chat_id = chat_id if force_chat_id else resolve_notify_chat_id(camera_id, device_name, media_type, chat_id, config)
     label = media_type.capitalize()
 
@@ -149,17 +157,17 @@ def _maybe_notify(config, camera_id, device_name, media_type, chat_id, force_cha
     if silent:
         print(f"{label} notification explicitly silenced for camera {camera_id}.", file=sys.stderr)
     elif snoozed:
-        print(f"{label} notifications are currently snoozed for camera {camera_id}. Bypassing Telegram notification.", file=sys.stderr)
-    elif effective_chat_id and is_match:
-        notified = send_fn(effective_chat_id)
+        print(f"{label} notifications are currently snoozed for camera {camera_id}. Bypassing notification.", file=sys.stderr)
+    elif is_match and (effective_webhook or effective_chat_id):
+        notified = webhook_fn(effective_webhook) if effective_webhook else send_fn(effective_chat_id)
         if notified:
             with stats_lock:
                 stats["global"]["notifications_sent"] += 1
                 cam_stats["notifications_sent"] += 1
-    elif effective_chat_id and not is_match:
-        print("No relevant targets detected; skipping Telegram notification.", file=sys.stderr)
+    elif not is_match and (effective_webhook or effective_chat_id):
+        print("No relevant targets detected; skipping notification.", file=sys.stderr)
     else:
-        print("Telegram notification bypassed: no chat ID configured.", file=sys.stderr)
+        print("Notification bypassed: no chat ID or webhook configured.", file=sys.stderr)
     return notified
 
 
@@ -251,9 +259,15 @@ def handle_video(config, model, video_path, device_name="DVR", channel_name="Cam
         # Corrupt/undecodable clip: fall back to relaying the raw video, same as before
         # YOLO analysis existed, since there's nothing to analyze or show a thumbnail for.
         print(f"Could not decode any frames from {video_path}; relaying without analysis.", file=sys.stderr)
+        undecoded_caption = f"*Video* en *{location_context}*"
         notified = _maybe_notify(
             config, camera_id, device_name, "video", chat_id, force_chat_id, silent, True, cam_stats,
-            lambda effective_chat_id: send_telegram_video(config, video_path, f"*Video* en *{location_context}*", effective_chat_id)
+            lambda effective_chat_id: send_telegram_video(config, video_path, undecoded_caption, effective_chat_id),
+            lambda effective_webhook: send_webhook_video(
+                effective_webhook, video_path, undecoded_caption,
+                extra_data={"camera_id": camera_id, "device_name": device_name, "channel_name": channel_name,
+                            "location": location_context}
+            )
         )
         return {"video": True, "notified": notified}
 
@@ -276,7 +290,12 @@ def handle_video(config, model, video_path, device_name="DVR", channel_name="Cam
 
     notified = _maybe_notify(
         config, camera_id, device_name, "video", chat_id, force_chat_id, silent, is_match, cam_stats,
-        lambda effective_chat_id: send_telegram_video(config, video_path, caption, effective_chat_id)
+        lambda effective_chat_id: send_telegram_video(config, video_path, caption, effective_chat_id),
+        lambda effective_webhook: send_webhook_video(
+            effective_webhook, video_path, caption,
+            extra_data={"camera_id": camera_id, "device_name": device_name, "channel_name": channel_name,
+                        "location": location_context, "objects": json.dumps(detections_list)}
+        )
     )
 
     _persist_detection(
@@ -330,7 +349,12 @@ def analyze_image(config, model, img_path, device_name="DVR", channel_name="Came
 
     notified = _maybe_notify(
         config, camera_id, device_name, "picture", chat_id, force_chat_id, silent, is_match, cam_stats,
-        lambda effective_chat_id: send_telegram_alert(config, img_path, caption, effective_chat_id)
+        lambda effective_chat_id: send_telegram_alert(config, img_path, caption, effective_chat_id),
+        lambda effective_webhook: send_webhook_alert(
+            effective_webhook, img_path, caption,
+            extra_data={"camera_id": camera_id, "device_name": device_name, "channel_name": channel_name,
+                        "location": location_context, "objects": json.dumps(detections_list)}
+        )
     )
 
     image_filename = os.path.basename(img_path)

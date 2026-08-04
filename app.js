@@ -608,6 +608,10 @@ document.addEventListener('DOMContentLoaded', () => {
                             <input type="text" class="camera-search-input chat-id-input" data-media="${mediaType}" style="flex:1; width:auto;" placeholder="Chat ID">
                             <button class="btn btn-secondary pop-save-chat" data-media="${mediaType}">Save</button>
                         </div>
+                        <div style="display:flex; gap:6px; margin-bottom:6px;">
+                            <input type="text" class="camera-search-input webhook-input" data-media="${mediaType}" style="flex:1; width:auto;" placeholder="Webhook URL (overrides Telegram)">
+                            <button class="btn btn-secondary pop-save-webhook" data-media="${mediaType}">Save</button>
+                        </div>
                         <div style="display:flex; gap:6px; flex-wrap:wrap;">
                             <button class="btn btn-secondary pop-snooze" data-media="${mediaType}" data-minutes="10">10m</button>
                             <button class="btn btn-secondary pop-snooze" data-media="${mediaType}" data-minutes="60">1h</button>
@@ -662,6 +666,20 @@ document.addEventListener('DOMContentLoaded', () => {
             b.onclick = async () => {
                 const input = notificationsMenu.querySelector(`.chat-id-input[data-media="${b.dataset.media}"]`);
                 await sendNotifyChat(scope, input.value.trim(), b.dataset.media);
+                hideNotificationsMenu();
+            };
+        });
+
+        const webhookOverrides = scopeData?.webhook || {};
+        notificationsMenu.querySelectorAll('.webhook-input').forEach(input => {
+            const mediaType = input.dataset.media;
+            input.value = webhookOverrides[mediaType] || '';
+            input.placeholder = 'Webhook URL (overrides Telegram)';
+        });
+        notificationsMenu.querySelectorAll('.pop-save-webhook').forEach(b => {
+            b.onclick = async () => {
+                const input = notificationsMenu.querySelector(`.webhook-input[data-media="${b.dataset.media}"]`);
+                await sendNotifyWebhook(scope, input.value.trim(), b.dataset.media);
                 hideNotificationsMenu();
             };
         });
@@ -807,6 +825,27 @@ document.addEventListener('DOMContentLoaded', () => {
             fetchStatus();
         } catch (err) {
             showToast('Failed to save chat ID', 'error');
+        }
+    }
+
+    // Send webhook-URL-override API call for the given scope (camera, device, or global)
+    // and media type ('picture' or 'video'). When set, this takes priority over the
+    // Telegram chat ID for the same scope -- see resolve_notify_webhook server-side. An
+    // empty webhookUrl clears the override, falling back to Telegram.
+    async function sendNotifyWebhook(scope, webhookUrl, mediaType) {
+        const { camera, device, label } = describeScope(scope);
+        try {
+            const response = await fetch('/api/notify-webhook', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ webhook: webhookUrl, camera, device, media_type: mediaType })
+            });
+            if (!response.ok) throw new Error('notify-webhook failed');
+            if (webhookUrl) showToast(`${label} (${mediaType}s) will notify webhook ${webhookUrl}`, 'success');
+            else showToast(`${label} (${mediaType}s) webhook override cleared`, 'success');
+            fetchStatus();
+        } catch (err) {
+            showToast('Failed to save webhook URL', 'error');
         }
     }
 

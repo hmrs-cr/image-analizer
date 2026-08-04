@@ -34,6 +34,10 @@ def _new_chat_id_overrides():
     return {t: "" for t in MEDIA_TYPES}
 
 
+def _new_webhook_overrides():
+    return {t: "" for t in MEDIA_TYPES}
+
+
 stats = {
     "global": {
         "pictures_analyzed": 0,
@@ -41,6 +45,7 @@ stats = {
         "notifications_sent": 0,
         "snooze": _new_snooze_state(),
         "chat_id": _new_chat_id_overrides(),
+        "webhook": _new_webhook_overrides(),
         "classes": ""
     },
     "cameras": {},
@@ -70,6 +75,7 @@ def get_camera_stats(camera_id):
                 "notifications_sent": 0,
                 "snooze": _new_snooze_state(),
                 "chat_id": _new_chat_id_overrides(),
+                "webhook": _new_webhook_overrides(),
                 "classes": ""
             }
         return stats["cameras"][camera_id]
@@ -81,6 +87,7 @@ def get_device_stats(device_name):
             stats["devices"][device_name] = {
                 "snooze": _new_snooze_state(),
                 "chat_id": _new_chat_id_overrides(),
+                "webhook": _new_webhook_overrides(),
                 "classes": ""
             }
         return stats["devices"][device_name]
@@ -168,6 +175,35 @@ def resolve_notify_chat_id(camera_id, device_name, media_type, fallback_chat_id,
     return cam_override or device_override or global_override or fallback_chat_id or config.telegram_chat_id
 
 
+def set_notify_webhook(camera, media_type, webhook_value, device=""):
+    """Sets the notification webhook-URL override for `device` (device-level), else
+    `camera` ('all' for the global setting), and `media_type` ('picture', 'video', or 'all'
+    for both). An empty string clears the override, falling back to resolve_notify_webhook's
+    lower-priority sources. Returns the updated webhook sub-dict."""
+    types = MEDIA_TYPES if media_type == "all" else (media_type,)
+    for t in types:
+        if t not in MEDIA_TYPES:
+            raise ValueError(f"Unknown media_type: {media_type}")
+    with stats_lock:
+        scoped = _resolve_scope_stats(camera, device)
+        target = scoped["webhook"] if scoped is not None else stats["global"]["webhook"]
+        for t in types:
+            target[t] = webhook_value
+        return dict(target)
+
+
+def resolve_notify_webhook(camera_id, device_name, media_type):
+    """Resolves the webhook URL to notify, in priority order: a per-camera override for
+    this media_type, then a per-device override, then a global override. Unlike
+    resolve_notify_chat_id there is no config-level default: an empty result means the
+    caller should fall back to Telegram (see pipeline._maybe_notify)."""
+    with stats_lock:
+        cam_override = get_camera_stats(camera_id)["webhook"][media_type]
+        device_override = get_device_stats(device_name)["webhook"][media_type]
+        global_override = stats["global"]["webhook"][media_type]
+    return cam_override or device_override or global_override
+
+
 def set_target_classes(camera, classes_value, device=""):
     """Sets the YOLO target-classes override (a comma-separated class-name string) for
     `device` (device-level), else `camera` ('all' for the global setting). An empty string
@@ -206,14 +242,21 @@ def save_notification_settings(config):
             "global": {
                 "snooze": dict(stats["global"]["snooze"]),
                 "chat_id": dict(stats["global"]["chat_id"]),
+                "webhook": dict(stats["global"]["webhook"]),
                 "classes": stats["global"]["classes"]
             },
             "cameras": {
-                cam_id: {"snooze": dict(cam["snooze"]), "chat_id": dict(cam["chat_id"]), "classes": cam["classes"]}
+                cam_id: {
+                    "snooze": dict(cam["snooze"]), "chat_id": dict(cam["chat_id"]),
+                    "webhook": dict(cam["webhook"]), "classes": cam["classes"]
+                }
                 for cam_id, cam in stats["cameras"].items()
             },
             "devices": {
-                device_name: {"snooze": dict(dev["snooze"]), "chat_id": dict(dev["chat_id"]), "classes": dev["classes"]}
+                device_name: {
+                    "snooze": dict(dev["snooze"]), "chat_id": dict(dev["chat_id"]),
+                    "webhook": dict(dev["webhook"]), "classes": dev["classes"]
+                }
                 for device_name, dev in stats["devices"].items()
             }
         }
@@ -252,6 +295,8 @@ def load_notification_settings(config):
                 stats["global"]["snooze"][t] = global_state["snooze"][t]
             if t in global_state.get("chat_id", {}):
                 stats["global"]["chat_id"][t] = global_state["chat_id"][t]
+            if t in global_state.get("webhook", {}):
+                stats["global"]["webhook"][t] = global_state["webhook"][t]
         if "classes" in global_state:
             stats["global"]["classes"] = global_state["classes"]
 
@@ -262,6 +307,8 @@ def load_notification_settings(config):
                     cam["snooze"][t] = cam_state["snooze"][t]
                 if t in cam_state.get("chat_id", {}):
                     cam["chat_id"][t] = cam_state["chat_id"][t]
+                if t in cam_state.get("webhook", {}):
+                    cam["webhook"][t] = cam_state["webhook"][t]
             if "classes" in cam_state:
                 cam["classes"] = cam_state["classes"]
 
@@ -272,6 +319,8 @@ def load_notification_settings(config):
                     dev["snooze"][t] = dev_state["snooze"][t]
                 if t in dev_state.get("chat_id", {}):
                     dev["chat_id"][t] = dev_state["chat_id"][t]
+                if t in dev_state.get("webhook", {}):
+                    dev["webhook"][t] = dev_state["webhook"][t]
             if "classes" in dev_state:
                 dev["classes"] = dev_state["classes"]
 

@@ -18,6 +18,7 @@ from .stats import (
     get_history_page,
     save_notification_settings,
     set_notify_chat_id,
+    set_notify_webhook,
     set_snooze,
     set_target_classes,
     snooze_status,
@@ -76,6 +77,13 @@ class NotifyChatBody(BaseModel):
     chat_id: str = ""
 
 
+class NotifyWebhookBody(BaseModel):
+    camera: str = "all"
+    device: str = ""
+    media_type: str = "all"
+    webhook: str = ""
+
+
 class TargetClassesBody(BaseModel):
     camera: str = "all"
     device: str = ""
@@ -111,6 +119,7 @@ def create_app(config, model) -> FastAPI:
                     "notifications_sent": cam["notifications_sent"],
                     "snooze": snooze_status(cam["snooze"]),
                     "chat_id": dict(cam["chat_id"]),
+                    "webhook": dict(cam["webhook"]),
                     "classes": cam["classes"],
                 }
                 for name, cam in stats["cameras"].items()
@@ -119,6 +128,7 @@ def create_app(config, model) -> FastAPI:
                 name: {
                     "snooze": snooze_status(dev["snooze"]),
                     "chat_id": dict(dev["chat_id"]),
+                    "webhook": dict(dev["webhook"]),
                     "classes": dev["classes"],
                 }
                 for name, dev in stats["devices"].items()
@@ -131,6 +141,7 @@ def create_app(config, model) -> FastAPI:
                     "notifications_sent": stats["global"]["notifications_sent"],
                     "snooze": snooze_status(stats["global"]["snooze"]),
                     "chat_id": dict(stats["global"]["chat_id"]),
+                    "webhook": dict(stats["global"]["webhook"]),
                     "classes": stats["global"]["classes"],
                 },
                 "cameras": cameras_data,
@@ -229,6 +240,18 @@ def create_app(config, model) -> FastAPI:
         return {
             "status": "success", "camera": body.camera, "device": body.device,
             "media_type": body.media_type, "chat_id": chat_id_value,
+        }
+
+    @app.post("/api/notify-webhook", dependencies=auth)
+    def api_notify_webhook(body: NotifyWebhookBody):
+        if body.media_type not in ("picture", "video", "all"):
+            raise HTTPException(400, "media_type must be 'picture', 'video', or 'all'")
+        webhook_value = body.webhook.strip()
+        set_notify_webhook(body.camera, body.media_type, webhook_value, device=body.device)
+        save_notification_settings(config)
+        return {
+            "status": "success", "camera": body.camera, "device": body.device,
+            "media_type": body.media_type, "webhook": webhook_value,
         }
 
     @app.post("/api/target-classes", dependencies=auth)
