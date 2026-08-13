@@ -25,10 +25,13 @@ def decode_mime_string(encoded_string):
     return result
 
 
+DEFAULT_CHANNEL_NAME = "Camera"
+
+
 def parse_email_body(body_text):
     """Extracts device name and clean channel name from email plain text layout."""
     device_name = "DVR"
-    channel_name = "Camera"
+    channel_name = DEFAULT_CHANNEL_NAME
 
     for line in body_text.splitlines():
         if "Nombre del dispositivo:" in line:
@@ -39,6 +42,12 @@ def parse_email_body(body_text):
             channel_name = clean_channel.strip()
 
     return device_name, channel_name
+
+
+def parse_channel_from_filename(filename):
+    """Falls back to the CAMxx segment of the attachment filename when the body has no channel field."""
+    match = re.search(r'_(CAM\d+)_\d{8}_\d{6}', filename)
+    return match.group(1) if match else None
 
 
 class ImapEmailSource(ImageSource):
@@ -69,7 +78,7 @@ class ImapEmailSource(ImageSource):
 
         print(f"\nMatch verified! Processing Email ID: {msg_id}")
 
-        device_name, channel_name = "DVR", "Camera"
+        device_name, channel_name = "DVR", DEFAULT_CHANNEL_NAME
         for part in msg.walk():
             if part.get_content_type() == "text/plain":
                 try:
@@ -94,14 +103,17 @@ class ImapEmailSource(ImageSource):
 
                 if not os.path.exists(filepath):
                     has_valid_attachment = True
-                    camera_folder = get_camera_folder(config, f"{device_name} - {channel_name}")
+                    effective_channel = channel_name
+                    if effective_channel == DEFAULT_CHANNEL_NAME:
+                        effective_channel = parse_channel_from_filename(filename) or effective_channel
+                    camera_folder = get_camera_folder(config, f"{device_name} - {effective_channel}")
                     os.makedirs(camera_folder, exist_ok=True)
                     filepath = os.path.join(camera_folder, unique_filename)
                     with open(filepath, "wb") as f:
                         f.write(part.get_payload(decode=True))
                     print(f"File saved: {filepath}")
 
-                    self.on_image(filepath, device_name, channel_name, config.telegram_chat_id)
+                    self.on_image(filepath, device_name, effective_channel, config.telegram_chat_id)
 
         if has_valid_attachment:
             client.delete_messages([msg_id])
