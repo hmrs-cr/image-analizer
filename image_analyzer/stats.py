@@ -337,6 +337,8 @@ def prune_old_images(config, now=None):
 
     for root, _, files in os.walk(config.download_folder):
         for filename in files:
+            if filename == NOTIFICATION_SETTINGS_FILENAME:
+                continue
             path = os.path.join(root, filename)
             try:
                 if os.path.isfile(path) and os.path.getmtime(path) < cutoff:
